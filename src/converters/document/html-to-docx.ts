@@ -59,7 +59,7 @@ import {
   TextRun,
   WidthType,
 } from 'docx';
-import { parseHTML } from 'linkedom';
+import { parseHtml } from './dom';
 
 const ELEMENT_NODE = 1;
 const TEXT_NODE = 3;
@@ -588,7 +588,7 @@ export const htmlToDocxConverter: Converter = {
     const mapper = new DocxMapper();
     let bodyChildren: (Paragraph | Table)[];
     try {
-      const { document } = parseHTML(toFullHtmlDocument(html));
+      const document = parseHtml(toFullHtmlDocument(html));
       const root = (document.body ??
         document.documentElement) as unknown as HtmlElementNode;
       bodyChildren = mapper.mapBody(root);

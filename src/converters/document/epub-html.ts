@@ -26,7 +26,7 @@ import type {
 import { ConversionError } from '@core/types';
 import { XMLParser } from 'fast-xml-parser';
 import { strFromU8, type Unzipped, unzipSync } from 'fflate';
-import { parseHTML } from 'linkedom';
+import { parseHtml } from './dom';
 
 const xmlParser = new XMLParser({
   preserveOrder: true,
@@ -148,7 +148,7 @@ function findOpfPath(zip: Unzipped): string {
   }
   const container = parseXml(strFromU8(containerBytes));
   const rootfile = findFirst(container, 'rootfile');
-  const fullPath = rootfile && attrString(nodeAttrs(rootfile), '@_full-path');
+  const fullPath = rootfile ? attrString(nodeAttrs(rootfile), '@_full-path') : undefined;
   if (!fullPath) {
     throw new ConversionError({
       code: 'E_CORRUPT_INPUT',
@@ -187,7 +187,7 @@ function readOpf(zip: Unzipped, opfPath: string): OpfInfo {
 
 /** Inlines every `<img src>` in a chapter fragment as a base64 data URI. */
 function inlineImages(bodyHtml: string, zip: Unzipped, chapterPath: string): string {
-  const { document } = parseHTML(`<!doctype html><html><body>${bodyHtml}</body></html>`);
+  const document = parseHtml(`<!doctype html><html><body>${bodyHtml}</body></html>`);
   for (const img of [...document.querySelectorAll('img')]) {
     const src = img.getAttribute('src');
     if (!src || src.startsWith('data:')) continue;
@@ -266,7 +266,7 @@ export const epubToHtml: Converter = {
       }
 
       const chapterHtml = strFromU8(bytes);
-      const { document } = parseHTML(chapterHtml);
+      const document = parseHtml(chapterHtml);
       const bodyHtml = document.body?.innerHTML ?? '';
       sections.push(
         `<section>\n${inlineImages(bodyHtml, zip, chapterPath)}\n</section>\n`,

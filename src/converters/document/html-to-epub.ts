@@ -23,7 +23,7 @@ import type {
 } from '@core/types';
 import { ConversionError } from '@core/types';
 import { EPub } from '@lesjoursfr/html-to-epub';
-import { parseHTML } from 'linkedom';
+import { parseHtml } from './dom';
 
 interface StrippedImages {
   readonly html: string;
@@ -32,13 +32,10 @@ interface StrippedImages {
 
 /** Remove every `<img src="http(s)://...">` — never let this hit the network. */
 function stripRemoteImages(html: string): StrippedImages {
-  const { document } = parseHTML(
+  const document = parseHtml(
     /<html[\s>]/i.test(html) ? html : `<html><body>${html}</body></html>`,
   );
-  const images = Array.from(document.querySelectorAll('img')) as unknown as {
-    getAttribute(name: string): string | null;
-    remove(): void;
-  }[];
+  const images = document.querySelectorAll('img');
 
   let removedCount = 0;
   for (const img of images) {
@@ -49,12 +46,11 @@ function stripRemoteImages(html: string): StrippedImages {
     }
   }
 
-  const body = document.body as unknown as { innerHTML: string } | null;
-  return { html: body?.innerHTML ?? '', removedCount };
+  return { html: document.body?.innerHTML ?? '', removedCount };
 }
 
 function deriveTitle(html: string, fallback: string): string {
-  const { document } = parseHTML(
+  const document = parseHtml(
     /<html[\s>]/i.test(html) ? html : `<html><body>${html}</body></html>`,
   );
   const titleText = (document.querySelector('title')?.textContent ?? '').trim();

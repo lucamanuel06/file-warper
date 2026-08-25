@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ConversionInput, ConvertContext } from '@core/types';
 import { strToU8, zipSync } from 'fflate';
-import { parseHTML } from 'linkedom';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { parseHtml } from './dom';
 import { odpToHtml, odtToHtml, pptxToHtml } from './office-zip-html';
 
 // A real 1x1 transparent PNG, used to exercise the data-URI image inlining
@@ -86,7 +86,7 @@ describe('odtToHtml', () => {
 
     const { readFile } = await import('node:fs/promises');
     const html = await readFile(outputPath, 'utf8');
-    const { document } = parseHTML(html);
+    const document = parseHtml(html);
 
     expect(document.querySelector('h1')?.textContent).toBe('Title Heading');
     expect(document.querySelector('p')?.textContent).toBe('Hello world.');
@@ -149,7 +149,7 @@ describe('odpToHtml', () => {
 
     const { readFile } = await import('node:fs/promises');
     const html = await readFile(outputPath, 'utf8');
-    const { document } = parseHTML(html);
+    const document = parseHtml(html);
     const sections = [...document.querySelectorAll('section')];
     expect(sections).toHaveLength(2);
     expect(sections[0]?.textContent).toContain('Slide one text');
@@ -208,7 +208,7 @@ describe('pptxToHtml', () => {
 
     const { readFile } = await import('node:fs/promises');
     const html = await readFile(outputPath, 'utf8');
-    const { document } = parseHTML(html);
+    const document = parseHtml(html);
     const sections = [...document.querySelectorAll('section')];
     expect(sections).toHaveLength(3);
     expect(sections[0]?.textContent).toContain('First slide');

@@ -155,7 +155,6 @@ export const pdfToText: Converter = {
     const loadingTask = pdfjs.getDocument({
       data: new Uint8Array(buffer),
       useWorkerFetch: false,
-      isEvalSupported: false,
       verbosity: pdfjs.VerbosityLevel.ERRORS,
     });
 

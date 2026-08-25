@@ -25,8 +25,8 @@ import type {
 import { ConversionError } from '@core/types';
 import { read as readWorkbookBuffer, utils as xlsxUtils } from '@e965/xlsx';
 import { Workbook } from 'exceljs';
-import { parseHTML } from 'linkedom';
 import Papa from 'papaparse';
+import { parseHtml } from './dom';
 
 export interface SpreadsheetSheet {
   readonly name: string;
@@ -220,7 +220,7 @@ function parseJsonSpreadsheet(text: string): SpreadsheetSheet {
 }
 
 function parseHtmlSpreadsheet(html: string, inputPath: string): SpreadsheetSheet {
-  const { document } = parseHTML(html);
+  const document = parseHtml(html);
   const table = document.querySelector('table');
   if (!table) {
     throw new ConversionError({

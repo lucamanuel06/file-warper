@@ -65,7 +65,20 @@ export const htmlToTxtConverter: Converter = {
 
     let text: string;
     try {
-      text = convertHtmlToText(html, { wordwrap: 100 });
+      // html-to-text uppercases h1-h6 and table header cells by default —
+      // wrong for a file converter, which must not alter a document's text.
+      text = convertHtmlToText(html, {
+        wordwrap: 100,
+        selectors: [
+          { selector: 'h1', options: { uppercase: false } },
+          { selector: 'h2', options: { uppercase: false } },
+          { selector: 'h3', options: { uppercase: false } },
+          { selector: 'h4', options: { uppercase: false } },
+          { selector: 'h5', options: { uppercase: false } },
+          { selector: 'h6', options: { uppercase: false } },
+          { selector: 'table', options: { uppercaseHeaderCells: false } },
+        ],
+      });
     } catch (cause) {
       throw new ConversionError({
         code: 'E_CORRUPT_INPUT',
