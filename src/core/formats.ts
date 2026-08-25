@@ -12,6 +12,15 @@
  * excluded on purpose — see docs/spec-engines.md §C.
  *
  * Flags: b=binary l=lossy a=animated c=container h=hub r=readOnly
+ *
+ * `readOnly` is not a style choice — it is a promise to the UI that we will
+ * never offer this format as a conversion target. Verified against the actual
+ * shipped engines:
+ *   spx, amr  — this ffmpeg build has no Speex/AMR *encoder* (decode only)
+ *   otf       — fonteditor-core ships OTFReader/otf2ttf but no OTF writer
+ *   heic/heif — sharp's prebuilt libvips refuses HEVC ("Unsupported compression")
+ *   psd, doc, xls, ppt, rar, cab, iso, wma, wmv — read-only by design
+ *   xhtml     — we read it; the writer emits plain HTML instead
  */
 
 import type { FormatCategory, FormatDef, FormatId, MagicSig } from './types';
@@ -161,7 +170,7 @@ const SPECS: readonly Spec[] = [
   ['m4a', 'M4A Audio', 'audio', 'm4a', 'audio/mp4', 'blc', 3, M.ftyp],
   ['ogg', 'Ogg Vorbis', 'audio', 'ogg,oga', 'audio/ogg', 'blc', 2, M.ogg, 'oga'],
   ['opus', 'Opus Audio', 'audio', 'opus', 'audio/opus', 'blc', 2, M.ogg],
-  ['spx', 'Speex Audio', 'audio', 'spx', 'audio/speex', 'blc', 0, M.ogg],
+  ['spx', 'Speex Audio', 'audio', 'spx', 'audio/speex', 'blcr', 0, M.ogg],
   [
     'aiff',
     'AIFF Audio',
@@ -174,7 +183,7 @@ const SPECS: readonly Spec[] = [
     'aif',
   ],
   ['wma', 'Windows Media Audio', 'audio', 'wma', 'audio/x-ms-wma', 'blr', 1, M.asf],
-  ['amr', 'AMR Audio', 'audio', 'amr', 'audio/amr', 'bl', 0, [[0, '2321414d52']]],
+  ['amr', 'AMR Audio', 'audio', 'amr', 'audio/amr', 'blr', 0, [[0, '2321414d52']]],
   ['ac3', 'AC-3 Audio', 'audio', 'ac3', 'audio/ac3', 'bl', 0, [[0, '0b77']]],
   ['caf', 'Core Audio', 'audio', 'caf', 'audio/x-caf', 'bc', 0, [[0, '63616666']]],
   ['au', 'Sun AU Audio', 'audio', 'au', 'audio/basic', 'b', 0, [[0, '2e736e64']]],
@@ -321,7 +330,7 @@ const SPECS: readonly Spec[] = [
     undefined,
     'htm',
   ],
-  ['xhtml', 'XHTML Document', 'document', 'xhtml', 'application/xhtml+xml', '', 0],
+  ['xhtml', 'XHTML Document', 'document', 'xhtml', 'application/xhtml+xml', 'r', 0],
   ['epub', 'EPUB Ebook', 'document', 'epub', 'application/epub+zip', 'bc', 2, M.zip],
 
   // ── Spreadsheet ──────────────────────────────────────────────────────────
@@ -517,7 +526,7 @@ const SPECS: readonly Spec[] = [
       [0, '74727565'],
     ],
   ],
-  ['otf', 'OpenType Font', 'font', 'otf', 'font/otf', 'b', 2, [[0, '4f54544f']]],
+  ['otf', 'OpenType Font', 'font', 'otf', 'font/otf', 'br', 2, [[0, '4f54544f']]],
   ['woff', 'WOFF Font', 'font', 'woff', 'font/woff', 'b', 2, [[0, '774f4646']]],
   ['woff2', 'WOFF2 Font', 'font', 'woff2', 'font/woff2', 'b', 3, [[0, '774f4632']]],
   [
