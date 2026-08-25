@@ -52,21 +52,28 @@ export class MainHopRunner {
   private slots: Slot[] = [];
   private readonly waiters: Array<(slot: Slot) => void> = [];
 
-  start(): void {
-    for (let i = 0; i < POOL_SIZE; i++) {
-      const win = new BrowserWindow({
-        show: false,
-        width: 1024,
-        height: 1400,
-        webPreferences: {
-          sandbox: true,
-          contextIsolation: true,
-          nodeIntegration: false,
-          offscreen: true,
-        },
-      });
-      this.slots.push({ win, busy: false });
-    }
+  /**
+   * No-op: windows are created lazily on first use (see `acquire`), not
+   * eagerly here. Creating them at startup makes the app open with 2
+   * invisible extra windows before any document conversion ever runs —
+   * worse startup time/memory for a resource nothing has asked for yet, and
+   * it makes `BrowserWindow.getAllWindows().length` lie about what's open.
+   */
+  start(): void {}
+
+  private createSlot(): Slot {
+    const win = new BrowserWindow({
+      show: false,
+      width: 1024,
+      height: 1400,
+      webPreferences: {
+        sandbox: true,
+        contextIsolation: true,
+        nodeIntegration: false,
+        offscreen: true,
+      },
+    });
+    return { win, busy: false };
   }
 
   private acquire(): Promise<Slot> {
@@ -74,6 +81,12 @@ export class MainHopRunner {
     if (free) {
       free.busy = true;
       return Promise.resolve(free);
+    }
+    if (this.slots.length < POOL_SIZE) {
+      const slot = this.createSlot();
+      slot.busy = true;
+      this.slots.push(slot);
+      return Promise.resolve(slot);
     }
     return new Promise((resolve) => this.waiters.push(resolve));
   }

@@ -6,9 +6,9 @@
 
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import { ALL_CONVERTERS } from '@converters/index';
+import { ConverterRegistry } from '@core/registry';
 import type { ConversionError, ConversionInput, ConvertContext } from '@core/types';
-import { ALL_CONVERTERS_STUB } from '../converters-registry-stub';
-import { ConverterRegistry } from '../local-graph';
 import type {
   CancelTaskMessage,
   MainToWorkerMessage,
@@ -16,7 +16,7 @@ import type {
   WorkerToMainMessage,
 } from '../worker-protocol';
 
-const workerConverters = ALL_CONVERTERS_STUB.filter(
+const workerConverters = ALL_CONVERTERS.filter(
   (c) => (c.residency ?? 'worker') === 'worker',
 );
 const registry = new ConverterRegistry();

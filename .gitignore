@@ -7,6 +7,8 @@ coverage/
 *.tsbuildinfo
 *.log
 .DS_Store
+test-results/
+playwright-report/
 
 # Sidecar binaries copied in by `npm run vendor` (scripts/vendor-binaries.mjs)
 # from already-installed node_modules packages — regenerated, not source.

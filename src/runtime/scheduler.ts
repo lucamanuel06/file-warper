@@ -9,10 +9,13 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import { ALL_CONVERTERS } from '@converters/index';
 import { extensionFor, getFormat } from '@core/formats';
+import { Router } from '@core/graph';
+import { resolveOutputPath } from '@core/naming';
+import { ConverterRegistry } from '@core/registry';
 import type {
   BatchId,
-  Converter,
   ConverterId,
   ConverterOptions,
   EnqueueRequest,
@@ -25,10 +28,7 @@ import type {
   SerializedError,
 } from '@core/types';
 import type { WarpEvent } from '@shared/ipc';
-import { ALL_CONVERTERS_STUB } from './converters-registry-stub';
-import { ConverterRegistry, Router } from './local-graph';
 import type { MainConvertContext, MainHopRunner } from './main-runner';
-import { computeOutputPath, createReservation, type NameReservation } from './naming';
 import { HopFailure, type WorkerPool } from './pool';
 import * as temp from './temp';
 
@@ -125,11 +125,10 @@ function routeFactorFor(target: FormatId): number {
 export class Scheduler extends EventEmitter {
   private readonly registry = new ConverterRegistry();
   private readonly router: Router;
-  private readonly converterById = new Map<ConverterId, Converter>();
   private readonly jobs = new Map<JobId, RuntimeJob>();
   private readonly batches = new Map<BatchId, BatchState>();
   private readonly batchOrder: BatchId[] = [];
-  private readonly reservation: NameReservation = createReservation();
+  private readonly reservation = new Set<string>();
   private readonly semaphores = new Map<string, Semaphore>();
   private pumping = false;
 
@@ -139,9 +138,8 @@ export class Scheduler extends EventEmitter {
     private readonly detect: DetectFn,
   ) {
     super();
-    for (const converter of ALL_CONVERTERS_STUB) {
+    for (const converter of ALL_CONVERTERS) {
       this.registry.register(converter);
-      this.converterById.set(converter.id, converter);
     }
     this.router = new Router(this.registry);
   }
@@ -300,17 +298,17 @@ export class Scheduler extends EventEmitter {
   ): RuntimeJob {
     const route =
       !skipRouting && info.format
-        ? (this.router.routeFor(info.format, req.target) ?? null)
+        ? (this.router.routesFrom(info.format).get(req.target) ?? null)
         : null;
     const outputPath =
       !skipRouting && route
-        ? computeOutputPath({
-            inputPath: filePath,
-            target: req.target,
-            location: req.output,
-            collision: req.collision,
-            reservation: this.reservation,
-          })
+        ? (resolveOutputPath(
+            filePath,
+            req.target,
+            req.output,
+            this.reservation,
+            req.collision,
+          ) ?? '')
         : '';
 
     const state: JobState =
@@ -543,7 +541,7 @@ export class Scheduler extends EventEmitter {
     input: string,
     output: string,
   ): Promise<void> {
-    const converter = this.converterById.get(converterId);
+    const converter = this.registry.getConverter(converterId);
     if (!converter) {
       throw new HopFailure({
         code: 'E_ENGINE',
@@ -554,7 +552,7 @@ export class Scheduler extends EventEmitter {
 
     const total = job.route?.steps.length ?? 1;
     const weights = (job.route?.steps ?? []).map((s) => {
-      const c = this.converterById.get(s.converterId);
+      const c = this.registry.getConverter(s.converterId);
       return Math.max(1, c?.cost(s.from, s.to).effort ?? 1);
     });
     const totalWeight = weights.reduce((a, b) => a + b, 0) || 1;
