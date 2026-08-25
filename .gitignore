@@ -5,3 +5,8 @@ out/
 release/
 *.log
 .DS_Store
+tsconfig.tsbuildinfo
+
+# Sidecar binaries copied in by `npm run vendor` (scripts/vendor-binaries.mjs)
+# from already-installed node_modules packages — regenerated, not source.
+resources/
