@@ -1,4 +1,4 @@
-// W4 owns this file
 import type { Converter } from '@core/types';
+import { avTranscode } from './av-transcode';
 
-export const avConverters: Converter[] = [];
+export const avConverters: Converter[] = [avTranscode];

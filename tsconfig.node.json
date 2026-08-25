@@ -5,6 +5,7 @@
     "lib": ["ES2023"],
     "module": "commonjs",
     "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
     "types": ["node"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
