@@ -1,0 +1,55 @@
+appId: com.lucamanuel.filewarper
+productName: File Warper
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - out/**
+  - package.json
+  - '!**/*.map'
+  # Non-darwin @img/sharp prebuilds — ~150 MB of dead weight on a mac-only build.
+  - '!node_modules/@img/*-linux-*/**'
+  - '!node_modules/@img/*-win32-*/**'
+  - '!node_modules/@img/*-linuxmusl-*/**'
+extraResources:
+  - from: resources/bin/${os}/${arch}
+    to: bin
+    filter: ['**/*']
+asar: true
+# asarUnpack is not needed for extraResources — they live outside app.asar
+# already. It IS needed for native .node addons that end up inside the asar.
+asarUnpack:
+  - '**/*.node'
+  - '**/node_modules/sharp/**'
+  - '**/node_modules/@img/**'
+mac:
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]
+  category: public.app-category.utilities
+  # Ad-hoc sign — REQUIRED on Apple Silicon. `identity: null` skips signing
+  # entirely, which leaves the arm64 Mach-O without even an ad-hoc signature;
+  # macOS reports the result as "damaged".
+  identity: '-'
+  # Ad-hoc signing + hardened runtime fails library validation.
+  hardenedRuntime: false
+  notarize: false
+  gatekeeperAssess: false
+  extendInfo:
+    CFBundleDocumentTypes:
+      - CFBundleTypeName: Any File
+        LSHandlerRank: Alternate
+        LSItemContentTypes:
+          - public.item
+dmg:
+  contents:
+    - x: 130
+      y: 220
+      type: file
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
