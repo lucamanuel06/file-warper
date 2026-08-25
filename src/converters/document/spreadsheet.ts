@@ -2,13 +2,20 @@
  * Spreadsheet model shared by both directions of the spreadsheet hop:
  *
  *   read:  xlsx / xls / ods -> csv / tsv / json / html   (`@e965/xlsx`)
- *   write: csv / tsv / json / html -> xlsx               (`exceljs`)
+ *   write: csv / tsv / json / html -> xlsx / ods         (`exceljs`, hand-rolled ODS)
  *
  * Both directions funnel through `SpreadsheetData` so the shape of "a
  * spreadsheet" stays identical no matter which library produced or consumes
  * it. Every cell is a plain string — this is a lossy, text-only model by
  * design (no formulas, no styles, no cell types); see the cost() functions
  * below for what that costs each pair.
+ *
+ * `@e965/xlsx` (SheetJS Community Edition) reads ODS but does not write it,
+ * so `-> ods` is hand-rolled ZIP+XML, the same pattern already used for
+ * odt/odp/pptx/epub parsing elsewhere in this directory: a `mimetype` entry
+ * (stored, uncompressed, per the ODF convention), a manifest, and a
+ * `content.xml` in the OpenDocument spreadsheet schema. Round-tripped
+ * against this file's own `spreadsheetReadConverter` in tests.
  */
 
 import { writeFile } from 'node:fs/promises';
@@ -25,6 +32,7 @@ import type {
 import { ConversionError } from '@core/types';
 import { read as readWorkbookBuffer, utils as xlsxUtils } from '@e965/xlsx';
 import { Workbook } from 'exceljs';
+import { zipSync } from 'fflate';
 import Papa from 'papaparse';
 import { parseHtml } from './dom';
 
@@ -246,6 +254,88 @@ async function writeXlsxFile(data: SpreadsheetData, outputPath: string): Promise
   await workbook.xlsx.writeFile(outputPath);
 }
 
+const ODS_MIME = 'application/vnd.oasis.opendocument.spreadsheet';
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function buildOdsContentXml(data: SpreadsheetData): string {
+  const tables = data.sheets
+    .map((sheet) => {
+      const rows = sheet.rows
+        .map((row) => {
+          const cells = row
+            .map(
+              (cell) =>
+                `<table:table-cell office:value-type="string"><text:p>${escapeXml(cell)}</text:p></table:table-cell>`,
+            )
+            .join('');
+          return `<table:table-row>${cells}</table:table-row>`;
+        })
+        .join('');
+      return `<table:table table:name="${escapeXml(sheet.name)}">${rows}</table:table>`;
+    })
+    .join('');
+  return (
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<office:document-content ' +
+    'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" ' +
+    'xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" ' +
+    'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" ' +
+    'office:version="1.2">' +
+    `<office:body><office:spreadsheet>${tables}</office:spreadsheet></office:body>` +
+    '</office:document-content>'
+  );
+}
+
+function buildOdsManifestXml(): string {
+  return (
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<manifest:manifest ' +
+    'xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" ' +
+    'manifest:version="1.2">' +
+    `<manifest:file-entry manifest:full-path="/" manifest:version="1.2" manifest:media-type="${ODS_MIME}"/>` +
+    '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>' +
+    '<manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/>' +
+    '</manifest:manifest>'
+  );
+}
+
+/**
+ * No custom styles to declare — but `styles.xml` isn't truly optional in
+ * practice: `@e965/xlsx`'s ODS reader (and other real-world readers) expect
+ * the entry to exist even when it's empty.
+ */
+function buildOdsStylesXml(): string {
+  return (
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<office:document-styles ' +
+    'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" ' +
+    'xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" ' +
+    'office:version="1.2">' +
+    '<office:styles/>' +
+    '</office:document-styles>'
+  );
+}
+
+async function writeOdsFile(data: SpreadsheetData, outputPath: string): Promise<void> {
+  const encoder = new TextEncoder();
+  const zipped = zipSync({
+    // Stored, not deflated, and the first entry — the ODF-convention way to
+    // let readers sniff the container's exact type from its first bytes.
+    mimetype: [encoder.encode(ODS_MIME), { level: 0 }],
+    'META-INF/manifest.xml': encoder.encode(buildOdsManifestXml()),
+    'content.xml': encoder.encode(buildOdsContentXml(data)),
+    'styles.xml': encoder.encode(buildOdsStylesXml()),
+  });
+  await writeFile(outputPath, zipped);
+}
+
 // ---------------------------------------------------------------------------
 // Cost functions
 // ---------------------------------------------------------------------------
@@ -381,7 +471,7 @@ export const spreadsheetWriteConverter: Converter = {
   residency: 'worker',
 
   inputs: WRITE_SOURCE_FORMATS,
-  outputs: ['xlsx'],
+  outputs: ['xlsx', 'ods'],
 
   cost(): EdgeCost {
     return writeCost();
@@ -449,12 +539,16 @@ export const spreadsheetWriteConverter: Converter = {
     ctx.onProgress({ ratio: 0.7, message: 'Writing workbook' });
 
     try {
-      await writeXlsxFile(data, output.path);
+      if (output.format === 'ods') {
+        await writeOdsFile(data, output.path);
+      } else {
+        await writeXlsxFile(data, output.path);
+      }
     } catch (cause) {
       if (cause instanceof ConversionError) throw cause;
       throw new ConversionError({
         code: 'E_ENGINE',
-        userMessage: 'The Excel workbook could not be written.',
+        userMessage: `The ${output.format === 'ods' ? 'OpenDocument spreadsheet' : 'Excel workbook'} could not be written.`,
         detail: cause instanceof Error ? cause.message : String(cause),
         retryable: true,
         cause,

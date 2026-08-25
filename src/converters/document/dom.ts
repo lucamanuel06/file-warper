@@ -44,6 +44,8 @@ export interface HtmlDocument extends HtmlNode {
   readonly documentElement: HtmlElement;
   querySelector(selector: string): HtmlElement | null;
   querySelectorAll(selector: string): readonly HtmlElement[];
+  /** Full document serialization, including the doctype if one was parsed. */
+  toString(): string;
 }
 
 /** Parse an HTML string and return a structurally-typed `document`. */

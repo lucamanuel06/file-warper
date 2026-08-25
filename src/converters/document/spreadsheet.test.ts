@@ -357,4 +357,69 @@ describe('spreadsheet converters', () => {
       ).rejects.toMatchObject({ code: 'E_CANCELLED' });
     });
   });
+
+  describe('write: csv/tsv/json/html -> ods', () => {
+    it('writes a real ods zip with a stored mimetype entry and content.xml', async () => {
+      const outputPath = join(dir, 'out.ods');
+      await spreadsheetWriteConverter.convert(
+        makeInput(join(dir, 'in.csv'), 'csv', 'a,b\n1,2\n'),
+        { path: outputPath, format: 'ods' },
+        {},
+        makeContext(dir),
+      );
+      const buf = await readFile(outputPath);
+      const fflate = await import('fflate');
+      const entries = fflate.unzipSync(new Uint8Array(buf));
+      expect(Object.keys(entries)).toContain('mimetype');
+      expect(Object.keys(entries)).toContain('content.xml');
+      expect(Object.keys(entries)).toContain('META-INF/manifest.xml');
+      expect(Object.keys(entries)).toContain('styles.xml');
+      expect(Buffer.from(entries.mimetype ?? []).toString('utf8')).toBe(
+        'application/vnd.oasis.opendocument.spreadsheet',
+      );
+      const contentXml = Buffer.from(entries['content.xml'] ?? []).toString('utf8');
+      expect(contentXml).toContain('<office:spreadsheet>');
+      expect(contentXml).toContain('<table:table');
+    });
+
+    it('round-trips cell values through the spreadsheet reader', async () => {
+      const outputPath = join(dir, 'out.ods');
+      await spreadsheetWriteConverter.convert(
+        makeInput(join(dir, 'in.csv'), 'csv', 'a,b\n1,2\n3,4\n'),
+        { path: outputPath, format: 'ods' },
+        {},
+        makeContext(dir),
+      );
+
+      const csvOutPath = join(dir, 'back.csv');
+      await spreadsheetReadConverter.convert(
+        makeInput(outputPath, 'ods', await readFile(outputPath)),
+        { path: csvOutPath, format: 'csv' },
+        {},
+        makeContext(dir),
+      );
+      const csvBack = await readFile(csvOutPath, 'utf8');
+      expect(csvBack.trim().replace(/\r\n/g, '\n')).toBe('a,b\n1,2\n3,4');
+    });
+
+    it('escapes XML-special characters in cell values without corrupting them', async () => {
+      const outputPath = join(dir, 'out.ods');
+      await spreadsheetWriteConverter.convert(
+        makeInput(join(dir, 'in.csv'), 'csv', 'a\n<tag> & "quoted"\n'),
+        { path: outputPath, format: 'ods' },
+        {},
+        makeContext(dir),
+      );
+
+      const jsonOutPath = join(dir, 'back.json');
+      await spreadsheetReadConverter.convert(
+        makeInput(outputPath, 'ods', await readFile(outputPath)),
+        { path: jsonOutPath, format: 'json' },
+        {},
+        makeContext(dir),
+      );
+      const parsed = JSON.parse(await readFile(jsonOutPath, 'utf8'));
+      expect(parsed).toEqual([{ a: '<tag> & "quoted"' }]);
+    });
+  });
 });
