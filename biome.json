@@ -7,9 +7,15 @@
       "scripts/**",
       "test/**",
       "*.ts",
-      "*.json"
-    ],
-    "experimentalScannerIgnores": ["node_modules", "out", "dist", "release", ".next"]
+      "*.json",
+      "!!**/node_modules",
+      "!!**/out",
+      "!!**/dist",
+      "!!**/release",
+      "!!**/.next",
+      "!next-env.d.ts",
+      "!tsconfig.json"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -27,7 +33,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "correctness": {
         "useExhaustiveDependencies": "error",
         "noUnusedVariables": "error",
@@ -37,7 +43,7 @@
         "noExplicitAny": "error"
       },
       "a11y": {
-        "recommended": true,
+        "preset": "recommended",
         "useKeyWithClickEvents": "error"
       }
     }

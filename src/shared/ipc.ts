@@ -110,7 +110,9 @@ export const INVOKE_CHANNELS = [
   'app:info',
 ] as const satisfies readonly (keyof IpcInvokeMap)[];
 
-export const EVENT_CHANNELS = ['warp:events'] as const satisfies readonly (keyof IpcEventMap)[];
+export const EVENT_CHANNELS = [
+  'warp:events',
+] as const satisfies readonly (keyof IpcEventMap)[];
 
 // ---------------------------------------------------------------------------
 // The shape `contextBridge` exposes as `window.warp`

@@ -178,8 +178,12 @@ body {
   *,
   *::before,
   *::after {
+    /* biome-ignore-start lint/complexity/noImportantStyles: an accessibility
+       override must beat every component-level transition, including inline
+       styles. This is the standard reduced-motion idiom, not a specificity hack. */
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+    /* biome-ignore-end lint/complexity/noImportantStyles: see above */
   }
 }
 @media (prefers-contrast: more) {

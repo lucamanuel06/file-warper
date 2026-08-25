@@ -11,11 +11,11 @@
  */
 
 import { execFile } from 'node:child_process';
+import { createReadStream } from 'node:fs';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-
 import { ALL_CONVERTERS } from '@converters/index';
 import { Router } from '@core/graph';
 import { ConverterRegistry } from '@core/registry';
@@ -26,7 +26,6 @@ import type {
   FormatId,
   Route,
 } from '@core/types';
-import { createReadStream } from 'node:fs';
 import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -40,7 +39,13 @@ async function probe(p: string): Promise<{
   streams: { codec_type: string; codec_name: string; width?: number; height?: number }[];
 }> {
   const { stdout } = await run(ffprobePath, [
-    '-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', p,
+    '-v',
+    'quiet',
+    '-print_format',
+    'json',
+    '-show_format',
+    '-show_streams',
+    p,
   ]);
   return JSON.parse(stdout);
 }
@@ -101,7 +106,10 @@ async function convert(srcPath: string, from: FormatId, to: FormatId): Promise<s
       ctx(),
     );
     const s = await stat(dest);
-    expect(s.size, `hop ${i} (${step.from}->${step.to}) wrote an empty file`).toBeGreaterThan(0);
+    expect(
+      s.size,
+      `hop ${i} (${step.from}->${step.to}) wrote an empty file`,
+    ).toBeGreaterThan(0);
     current = dest;
   }
   return current;
@@ -127,8 +135,16 @@ async function makePng(): Promise<string> {
 async function makeWav(): Promise<string> {
   const p = path.join(dir, 'in.wav');
   await run(ffmpegPath, [
-    '-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=0.4',
-    '-ar', '8000', '-ac', '1', p,
+    '-y',
+    '-f',
+    'lavfi',
+    '-i',
+    'sine=frequency=440:duration=0.4',
+    '-ar',
+    '8000',
+    '-ac',
+    '1',
+    p,
   ]);
   return p;
 }
@@ -136,9 +152,23 @@ async function makeWav(): Promise<string> {
 async function makeMp4(): Promise<string> {
   const p = path.join(dir, 'in.mp4');
   await run(ffmpegPath, [
-    '-y', '-f', 'lavfi', '-i', 'testsrc=size=32x32:rate=5:duration=0.6',
-    '-f', 'lavfi', '-i', 'sine=frequency=440:duration=0.6',
-    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', p,
+    '-y',
+    '-f',
+    'lavfi',
+    '-i',
+    'testsrc=size=32x32:rate=5:duration=0.6',
+    '-f',
+    'lavfi',
+    '-i',
+    'sine=frequency=440:duration=0.6',
+    '-c:v',
+    'libx264',
+    '-pix_fmt',
+    'yuv420p',
+    '-c:a',
+    'aac',
+    '-shortest',
+    p,
   ]);
   return p;
 }
@@ -168,14 +198,24 @@ describe('registry + graph', () => {
     // LibreOffice is legitimately optional. `residency: 'main'` converters need
     // the Electron runtime and are covered by the Playwright suite instead.
     for (const line of unavailable) {
-      expect(line, `unexpected unavailable converter -> ${line}`).toMatch(/libre|soffice/i);
+      expect(line, `unexpected unavailable converter -> ${line}`).toMatch(
+        /libre|soffice/i,
+      );
     }
   });
 
   it('reaches a broad set of targets from common inputs', () => {
-    for (const [src, min] of [['png', 6], ['mp4', 6], ['json', 4], ['zip', 3]] as const) {
+    for (const [src, min] of [
+      ['png', 6],
+      ['mp4', 6],
+      ['json', 4],
+      ['zip', 3],
+    ] as const) {
       const targets = router.targetsFor(src);
-      expect(targets.length, `${src} reaches only ${targets.length}`).toBeGreaterThanOrEqual(min);
+      expect(
+        targets.length,
+        `${src} reaches only ${targets.length}`,
+      ).toBeGreaterThanOrEqual(min);
     }
   });
 
@@ -190,9 +230,12 @@ describe('registry + graph', () => {
       availableConverters: () => ALL_CONVERTERS,
     });
     const route = optimistic.routesFrom('docx').get('pdf');
-    expect(route, 'docx -> pdf is unreachable even with every converter up').toBeTruthy();
-    expect(route!.steps.length).toBeGreaterThanOrEqual(1);
-    expect(route!.steps.length).toBeLessThanOrEqual(3);
+    expect(
+      route,
+      'docx -> pdf is unreachable even with every converter up',
+    ).toBeDefined();
+    expect(route?.steps.length).toBeGreaterThanOrEqual(1);
+    expect(route?.steps.length).toBeLessThanOrEqual(3);
   });
 });
 
@@ -231,7 +274,7 @@ describe('audio/video (ffmpeg)', () => {
     const out = await convert(await makeWav(), 'wav', 'mp3');
     const h = await head(out, 3);
     const isId3 = h.toString('latin1') === 'ID3';
-    const isFrame = h[0] === 0xff && (h[1]! & 0xe0) === 0xe0;
+    const isFrame = h[0] === 0xff && ((h[1] ?? 0) & 0xe0) === 0xe0;
     expect(isId3 || isFrame, `not an mp3: ${h.toString('hex')}`).toBe(true);
   }, 30_000);
 
@@ -262,7 +305,9 @@ describe('audio/video (ffmpeg)', () => {
     const info = await probe(out);
     expect(info.format.format_name).toContain('webm');
     const video = info.streams.find((s) => s.codec_type === 'video');
-    expect(video?.codec_name, 'webm must carry a VP8/VP9/AV1 stream').toMatch(/vp8|vp9|av1/);
+    expect(video?.codec_name, 'webm must carry a VP8/VP9/AV1 stream').toMatch(
+      /vp8|vp9|av1/,
+    );
   }, 180_000);
 });
 
