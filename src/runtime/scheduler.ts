@@ -296,8 +296,21 @@ export class Scheduler extends EventEmitter {
     req: EnqueueRequest,
     skipRouting = false,
   ): RuntimeJob {
-    const route =
-      !skipRouting && info.format
+    // A file already in the target format is not an error — it is a copy.
+    // Batches like "convert these to MP4" routinely contain one file that is
+    // already an MP4, and marking it `skipped` reads as a failure to the user.
+    // A zero-step route models it; `runRoute` copies instead of transcoding.
+    const identity = !skipRouting && info.format !== null && info.format === req.target;
+    const route: Route | null = identity
+      ? {
+          from: req.target,
+          to: req.target,
+          steps: [],
+          totalWeight: 0,
+          retention: 1,
+          lossless: true,
+        }
+      : !skipRouting && info.format
         ? (this.router.routesFrom(info.format).get(req.target) ?? null)
         : null;
     const outputPath =
@@ -436,6 +449,16 @@ export class Scheduler extends EventEmitter {
     });
 
     try {
+      if (job.route.steps.length === 0) {
+        // Identity job: the input is already in the target format. Copy it —
+        // never fall through to commitStaged with `cur === job.inputPath`,
+        // which would RENAME the user's source file onto the output path and
+        // destroy the original.
+        const dest = temp.stagingPathBeside(job.outputPath);
+        staged.push(dest);
+        await fsp.copyFile(job.inputPath, dest);
+        cur = dest;
+      }
       for (let i = 0; i < job.route.steps.length; i++) {
         const step = job.route.steps[i];
         if (!step) continue;

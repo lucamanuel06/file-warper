@@ -1,5 +1,11 @@
 /**
  * Requires the fully integrated app — see empty-state.spec.ts header.
+ *
+ * The unreachable file here is a ZIP, not a video. Video was the original
+ * choice, but the real converter graph legitimately routes `mp4 -> png -> webp`
+ * (a poster frame), so a video is NOT unreachable from an image target — the
+ * app was right and the old assertion was wrong. An archive only ever reaches
+ * other archive formats, which is exactly the property these tests need.
  */
 import {
   type ElectronApplication,
@@ -8,7 +14,7 @@ import {
   type Page,
   test,
 } from '@playwright/test';
-import { makeFixtureDir, writeMp4Fixture, writePngFixture } from './fixtures';
+import { makeFixtureDir, writePngFixture, writeZipFixture } from './fixtures';
 
 let app: ElectronApplication;
 let win: Page;
@@ -19,7 +25,7 @@ test.beforeAll(async () => {
   paths = [
     await writePngFixture(dir, 'a.png'),
     await writePngFixture(dir, 'b.png'),
-    await writeMp4Fixture(dir, 'c.mp4'),
+    await writeZipFixture(dir, 'c.zip'),
   ];
   app = await electron.launch({ args: ['.'], env: { ...process.env, E2E: '1' } });
   win = await app.firstWindow();
@@ -39,8 +45,8 @@ test('a mixed-category drop auto-switches to the majority category and dims the 
   await win.getByTestId('dropzone').click();
   await expect(win.getByTestId('file-row')).toHaveCount(3);
 
-  // 2 of 3 files are images; the picker should auto-switch to the image default (WebP)
-  // and the header should count only the reachable files as "will convert".
+  // 2 of 3 files are images; the picker should auto-switch to the image default
+  // (WebP) and the header should count only the reachable files as "will convert".
   await expect(win.getByTestId('list-header')).toContainText('2 will convert');
   await expect(win.getByTestId('format-select')).toHaveValue('webp');
 
@@ -51,7 +57,7 @@ test('a mixed-category drop auto-switches to the majority category and dims the 
 });
 
 test('changing the target live re-evaluates which rows are dimmed', async () => {
-  await win.getByTestId('format-select').selectOption('mp4');
+  await win.getByTestId('format-select').selectOption('tar');
   const rows = win.getByTestId('file-row');
   await expect(rows.nth(0)).toContainText('Skipped');
   await expect(rows.nth(1)).toContainText('Skipped');

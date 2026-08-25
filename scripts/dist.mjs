@@ -53,5 +53,7 @@ child.on('exit', (code) => {
   console.log(`  App bundle : ${path.join(outDir, 'mac-arm64', 'File Warper.app')}`);
   console.log(`  Installers : ${localRelease}`);
   console.log('');
-  console.log('  Open it with:  open "' + path.join(outDir, 'mac-arm64', 'File Warper.app') + '"');
+  console.log(
+    `  Open it with:  open "${path.join(outDir, 'mac-arm64', 'File Warper.app')}"`,
+  );
 });

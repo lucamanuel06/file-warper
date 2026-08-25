@@ -1,8 +1,8 @@
 import path from 'node:path';
+import { probeFile } from '@core/detect';
 import { app, BrowserWindow, systemPreferences } from 'electron';
 import { MainHopRunner } from '../runtime/main-runner';
 import { WorkerPool } from '../runtime/pool';
-import { probeFile } from '../runtime/probe';
 import { Scheduler } from '../runtime/scheduler';
 import * as temp from '../runtime/temp';
 import { registerIpcHandlers, startEventPump } from './ipc';
