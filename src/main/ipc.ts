@@ -9,10 +9,10 @@ import { randomUUID } from 'node:crypto';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { ALL_CONVERTERS } from '@converters/index';
 import type { EnqueueRequest, JobId, ProbeResult } from '@core/types';
 import type { WarpEvent } from '@shared/ipc';
 import { type BrowserWindow, dialog, ipcMain, shell } from 'electron';
-import { ALL_CONVERTERS_STUB } from '../runtime/converters-registry-stub';
 import { sanitizeBasename } from '../runtime/naming';
 import { probeFile } from '../runtime/probe';
 import type { Scheduler } from '../runtime/scheduler';
@@ -162,7 +162,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       preserveMetadata: true,
       deterministic: false,
     };
-    for (const converter of ALL_CONVERTERS_STUB) {
+    for (const converter of ALL_CONVERTERS) {
       if (!converter.outputs.includes(target)) continue;
       Object.assign(defaults, converter.defaultOptions ?? {});
     }

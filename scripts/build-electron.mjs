@@ -41,6 +41,12 @@ const common = {
   sourcemap: true,
   minify: !watch,
   logLevel: 'info',
+  // esbuild's automatic tsconfig discovery only ever looks for a file
+  // literally named `tsconfig.json` (the renderer config) walking up from
+  // each source file — it would never find `tsconfig.node.json`, so
+  // `@converters/*`/`@runtime/*` (declared only there) silently fail to
+  // resolve and get left as an unresolved `require(...)` at runtime.
+  tsconfig: 'tsconfig.node.json',
 };
 
 const entries = [
