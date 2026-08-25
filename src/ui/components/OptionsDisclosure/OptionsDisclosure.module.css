@@ -1,0 +1,146 @@
+.disabledWrap {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 28px;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.iconExpanded {
+  transform: rotate(90deg);
+}
+.header svg {
+  transition: transform var(--dur-base) var(--ease);
+}
+
+.panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-base) var(--ease);
+}
+.panelExpanded {
+  grid-template-rows: 1fr;
+}
+.panelInner {
+  overflow: hidden;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-2) 0 var(--space-3);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.rowLabel {
+  flex-shrink: 0;
+  width: 96px;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.segmented {
+  display: inline-flex;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  margin-left: auto;
+}
+.segmentButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px var(--space-3);
+  border-radius: calc(var(--radius-sm) - 2px);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.segmentActive {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-popover);
+}
+.segmentInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.segmentInput:focus-visible + span {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.select {
+  margin-left: auto;
+  appearance: none;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  padding: 4px var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.switch {
+  margin-left: auto;
+  width: 32px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--bg-active);
+  padding: 2px;
+  transition: background var(--dur-fast) var(--ease);
+}
+.switchOn {
+  background: var(--accent);
+}
+.switchKnob {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  transition: transform var(--dur-fast) var(--ease);
+}
+.switchOn .switchKnob {
+  transform: translateX(14px);
+}
+
+.saveButton {
+  margin-left: auto;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  padding: 4px var(--space-2);
+}
+.saveChosen {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.saveChosen .saveButton {
+  margin-left: 0;
+}
+.saveRevert {
+  color: var(--text-tertiary);
+  width: 18px;
+  height: 18px;
+}
+.saveRevert:hover {
+  color: var(--text-primary);
+}
