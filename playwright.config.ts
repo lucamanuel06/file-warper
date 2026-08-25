@@ -5,11 +5,12 @@ export default defineConfig({
   testDir: 'e2e',
   testMatch: '*.spec.ts',
   globalSetup: path.join(__dirname, 'e2e/harness/global-setup.ts'),
-  // Electron windows and the shared session temp dir don't like concurrent
-  // instances stepping on each other — one worker, in order.
+  // Electron cannot run headless on macOS, and multiple instances sharing one
+  // session temp dir flake in ways that look like real bugs — one worker, in order.
   workers: 1,
   fullyParallel: false,
   retries: 0,
   reporter: [['list']],
-  timeout: 30_000,
+  // Generous: the video fixtures genuinely take a few seconds each.
+  timeout: 60_000,
 });

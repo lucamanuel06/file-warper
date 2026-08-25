@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-    "ignoreDeprecations": "6.0",
     "target": "ES2022",
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "types": ["node"],
@@ -33,7 +32,8 @@
     "src/ui/**/*.tsx",
     "src/core/**/*.ts",
     "src/shared/**/*.ts",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
