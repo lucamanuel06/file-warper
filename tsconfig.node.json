@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@core/*": ["./src/core/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@converters/*": ["./src/converters/*"],
+      "@runtime/*": ["./src/runtime/*"]
+    }
+  },
+  "include": [
+    "src/main/**/*.ts",
+    "src/preload/**/*.ts",
+    "src/runtime/**/*.ts",
+    "src/converters/**/*.ts",
+    "src/core/**/*.ts",
+    "src/shared/**/*.ts",
+    "scripts/**/*.mjs",
+    "e2e/**/*.ts"
+  ],
+  "exclude": ["node_modules", "out", "dist", "release", "src/app", "src/ui"]
+}
