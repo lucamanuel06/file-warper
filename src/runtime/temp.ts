@@ -126,11 +126,21 @@ export function registerTempCleanupHooks(): void {
 /**
  * The final hop writes here — same directory (and volume) as `finalPath` —
  * so the commit is a same-volume `rename`, which is atomic.
+ *
+ * The staging name KEEPS the destination's extension. It used to end in
+ * `.tmp`, which broke every ffmpeg conversion in the real app: ffmpeg picks
+ * its muxer from the output extension and reported "Unable to find a suitable
+ * output format for '.filewarper-….tmp'". The ffmpeg adapter now also passes
+ * `-f` explicitly, but any engine that sniffs the path deserves a truthful
+ * one, so both halves of the fix stay.
+ *
+ * The leading dot keeps it hidden in Finder while it is being written.
  */
 export function stagingPathBeside(finalPath: string): string {
   const dir = path.dirname(finalPath);
   const rand = randomBytes(6).toString('hex');
-  return path.join(dir, `.filewarper-${rand}.tmp`);
+  const ext = path.extname(finalPath); // includes the dot, '' when there is none
+  return path.join(dir, `.filewarper-${rand}${ext}`);
 }
 
 /** Atomic-as-possible commit of a staged file onto its final destination. */
@@ -149,7 +159,13 @@ export async function discardStaged(stagedPath: string): Promise<void> {
   await fsp.unlink(stagedPath).catch(() => {});
 }
 
-/** Sweeps orphaned `.filewarper-*.tmp` files left in a directory we wrote to. */
+/**
+ * Sweeps orphaned `.filewarper-*` files left in a directory we wrote to.
+ *
+ * Matches on the prefix ONLY. Staging files carry the destination's extension
+ * now, so an `.endsWith('.tmp')` filter would silently stop collecting them.
+ * The prefix is specific enough on its own.
+ */
 export async function sweepStaleStaging(dir: string): Promise<void> {
   let entries: string[];
   try {
@@ -159,7 +175,7 @@ export async function sweepStaleStaging(dir: string): Promise<void> {
   }
   await Promise.all(
     entries
-      .filter((name) => name.startsWith('.filewarper-') && name.endsWith('.tmp'))
+      .filter((name) => name.startsWith('.filewarper-'))
       .map((name) => fsp.unlink(path.join(dir, name)).catch(() => {})),
   );
 }

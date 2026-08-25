@@ -6,6 +6,8 @@ exports[`buildFfmpegArgs (pure, snapshot) > mp4 -> gif builds a single-pass pale
   "/in.mp4",
   "-filter_complex",
   "fps=12,scale=480:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse",
+  "-f",
+  "gif",
   "/out.gif",
 ]
 `;
@@ -24,6 +26,8 @@ exports[`buildFfmpegArgs (pure, snapshot) > mp4 -> ogv (theora + vorbis) 1`] = `
   "libvorbis",
   "-q:a",
   "9",
+  "-f",
+  "ogg",
   "/out.ogv",
 ]
 `;
@@ -44,6 +48,8 @@ exports[`buildFfmpegArgs (pure, snapshot) > mp4 -> webm (vp9 + opus) 1`] = `
   "libopus",
   "-b:a",
   "128k",
+  "-f",
+  "webm",
   "/out.webm",
 ]
 `;
@@ -57,6 +63,8 @@ exports[`buildFfmpegArgs (pure, snapshot) > mp4 -> y4m drops audio and uses no e
   "-pix_fmt",
   "yuv420p",
   "-an",
+  "-f",
+  "yuv4mpegpipe",
   "/out.y4m",
 ]
 `;
@@ -73,6 +81,8 @@ exports[`buildFfmpegArgs (pure, snapshot) > remux: mp4 -> mov produces -c copy 1
   "copy",
   "-movflags",
   "+faststart",
+  "-f",
+  "mov",
   "/out.mov",
 ]
 `;

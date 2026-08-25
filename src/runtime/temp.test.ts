@@ -52,7 +52,16 @@ describe('temp', () => {
     const finalPath = '/some/output/dir/photo.png';
     const staged = temp.stagingPathBeside(finalPath);
     expect(path.dirname(staged)).toBe(path.dirname(finalPath));
-    expect(path.basename(staged)).toMatch(/^\.filewarper-[0-9a-f]+\.tmp$/);
+    expect(path.basename(staged)).toMatch(/^\.filewarper-[0-9a-f]+\.png$/);
+  });
+
+  it('stagingPathBeside keeps the destination extension', () => {
+    // ffmpeg picks its muxer from the output extension. A `.tmp` staging name
+    // made every A/V conversion fail with "Unable to find a suitable output
+    // format" once the scheduler (rather than a test) chose the path.
+    expect(temp.stagingPathBeside('/out/song.mp3')).toMatch(/\.mp3$/);
+    expect(temp.stagingPathBeside('/out/clip.mp4')).toMatch(/\.mp4$/);
+    expect(temp.stagingPathBeside('/out/archive.tar.gz')).toMatch(/\.gz$/);
   });
 
   it('commitStaged renames the staged file onto the final path', async () => {

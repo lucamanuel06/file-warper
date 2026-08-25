@@ -189,7 +189,17 @@ describe('buildFfmpegArgs (pure, snapshot)', () => {
       {},
       VIDEO_PROBE,
     );
-    expect(result.args).toEqual(['-i', '/in.mp4', '-frames:v', '1', '/out.png']);
+    // `-f image2` is not optional: the scheduler stages output under a name it
+    // chooses, so the muxer must never be inferred from the path.
+    expect(result.args).toEqual([
+      '-i',
+      '/in.mp4',
+      '-frames:v',
+      '1',
+      '-f',
+      'image2',
+      '/out.png',
+    ]);
   });
 
   it('resolution=720p never upscales a smaller source', () => {

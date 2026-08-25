@@ -278,6 +278,31 @@ describe('audio/video (ffmpeg)', () => {
     expect(isId3 || isFrame, `not an mp3: ${h.toString('hex')}`).toBe(true);
   }, 30_000);
 
+  it('writes to an extensionless path (the real staging case)', async () => {
+    // REGRESSION: the scheduler stages the final hop as `.filewarper-<rand>`,
+    // and ffmpeg picks its muxer from the extension. Every A/V conversion in
+    // the shipped app failed with "Unable to find a suitable output format"
+    // while every test passed, because tests wrote to `out.mp3` and only the
+    // scheduler ever chose the real staging name. Assert the engine does not
+    // depend on the path at all.
+    const src = await makeWav();
+    const conv = registry.getConverter('ffmpeg:av-transcode') as Converter;
+    for (const target of ['mp3', 'flac', 'm4a'] as const) {
+      const dest = path.join(dir, `.filewarper-${target}-nosuffix`);
+      await conv.convert(
+        inputFor(src, 'wav', (await stat(src)).size),
+        { path: dest, format: target },
+        {},
+        ctx(),
+      );
+      const info = await probe(dest);
+      expect(
+        info.streams.some((s) => s.codec_type === 'audio'),
+        `${target} written to an extensionless path is not valid audio`,
+      ).toBe(true);
+    }
+  }, 60_000);
+
   it('wav -> flac', async () => {
     const out = await convert(await makeWav(), 'wav', 'flac');
     expect((await head(out, 4)).toString('latin1')).toBe('fLaC');

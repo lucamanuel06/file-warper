@@ -223,6 +223,56 @@ export interface BuildArgsResult {
 }
 
 /**
+ * FormatId -> ffmpeg muxer name.
+ *
+ * ffmpeg normally infers the container from the output file extension. We must
+ * NOT rely on that: the scheduler writes every final hop to a staging file
+ * (`.filewarper-<rand>.<ext>`) and renames it into place only on success, and
+ * any engine that guesses from the path is one naming change away from
+ * "Unable to find a suitable output format". Always pass `-f` explicitly.
+ *
+ * Every name below is verified present in the bundled ffmpeg's `-muxers` list.
+ */
+const FFMPEG_MUXER: Readonly<Record<string, string>> = {
+  // audio
+  mp3: 'mp3',
+  wav: 'wav',
+  flac: 'flac',
+  aac: 'adts',
+  m4a: 'ipod',
+  ogg: 'ogg',
+  opus: 'opus',
+  aiff: 'aiff',
+  ac3: 'ac3',
+  caf: 'caf',
+  au: 'au',
+  mka: 'matroska',
+  // video
+  mp4: 'mp4',
+  mov: 'mov',
+  m4v: 'mp4',
+  mkv: 'matroska',
+  webm: 'webm',
+  avi: 'avi',
+  '3gp': '3gp',
+  flv: 'flv',
+  mpeg: 'mpeg',
+  ts: 'mpegts',
+  ogv: 'ogg',
+  y4m: 'yuv4mpegpipe',
+  // stills
+  gif: 'gif',
+  png: 'image2',
+};
+
+/** Appends `-f <muxer> <path>`. Use this instead of pushing the path directly. */
+function pushOutput(args: string[], output: { path: string; format: FormatId }): void {
+  const muxer = FFMPEG_MUXER[output.format];
+  if (muxer) args.push('-f', muxer);
+  args.push(output.path);
+}
+
+/**
  * Pure argv builder — no process spawning, no filesystem access. Kept
  * separate from `convert()` so the argv logic (where the real bugs live)
  * can be snapshot-tested without mocking `execa`.
@@ -241,25 +291,25 @@ export function buildFfmpegArgs(
   if (isRemuxCandidate(input.format, output.format, probe)) {
     const args = ['-i', input.path, '-map', '0:v:0?', '-map', '0:a:0?', '-c', 'copy'];
     if (MOVFLAGS_TARGETS.has(output.format)) args.push('-movflags', '+faststart');
-    args.push(output.path);
+    pushOutput(args, output);
     return { args, isRemux: true };
   }
 
   if (output.format === 'gif') {
-    return {
-      args: [
-        '-i',
-        input.path,
-        '-filter_complex',
-        'fps=12,scale=480:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse',
-        output.path,
-      ],
-      isRemux: false,
-    };
+    const args = [
+      '-i',
+      input.path,
+      '-filter_complex',
+      'fps=12,scale=480:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse',
+    ];
+    pushOutput(args, output);
+    return { args, isRemux: false };
   }
 
   if (output.format === 'png') {
-    return { args: ['-i', input.path, '-frames:v', '1', output.path], isRemux: false };
+    const args = ['-i', input.path, '-frames:v', '1'];
+    pushOutput(args, output);
+    return { args, isRemux: false };
   }
 
   const isVideoTarget = VIDEO_OUT_SET.has(output.format);
@@ -282,7 +332,7 @@ export function buildFfmpegArgs(
     args.push(...audioRateArgs(probe, channels));
   }
 
-  args.push(output.path);
+  pushOutput(args, output);
   return { args, isRemux: false };
 }
 
