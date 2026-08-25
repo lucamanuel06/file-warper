@@ -3,15 +3,6 @@ import { access, constants } from 'node:fs/promises';
 import path from 'node:path';
 import type { Availability } from '@core/types';
 
-declare global {
-  namespace NodeJS {
-    interface Process {
-      /** Set by Electron in the main process; absent in plain Node (tests, dev). */
-      resourcesPath?: string;
-    }
-  }
-}
-
 /**
  * W2 owns `src/main/resolveBinary.ts`, which may not exist on this branch.
  * This is a small local resolver so av converters don't block on that:
@@ -51,8 +42,12 @@ async function resolveBinary(
   const fromEnv = process.env[envVar];
   if (fromEnv) return fromEnv;
 
-  if (process.resourcesPath) {
-    const packaged = path.join(process.resourcesPath, 'bin', binName);
+  // Electron sets this in the main process; plain Node (tests, dev outside
+  // Electron) doesn't have it, despite @types/node declaring it as `string`.
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string })
+    .resourcesPath;
+  if (resourcesPath) {
+    const packaged = path.join(resourcesPath, 'bin', binName);
     if (existsSync(packaged)) return packaged;
   }
 
