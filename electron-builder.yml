@@ -16,6 +16,8 @@ extraResources:
   - from: resources/bin/${os}/${arch}
     to: bin
     filter: ['**/*']
+# Strips com.apple.FinderInfo etc. before signing — codesign hard-fails on it.
+afterPack: scripts/after-pack.mjs
 asar: true
 # asarUnpack is not needed for extraResources — they live outside app.asar
 # already. It IS needed for native .node addons that end up inside the asar.
