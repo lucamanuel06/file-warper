@@ -5,6 +5,7 @@
       "src/**",
       "e2e/**",
       "scripts/**",
+      "test/**",
       "*.ts",
       "*.json"
     ],

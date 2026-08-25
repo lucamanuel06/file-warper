@@ -2,6 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "types": ["node"],
     "jsx": "preserve",
     "module": "esnext",
     "moduleResolution": "bundler",
@@ -15,6 +16,7 @@
     "isolatedModules": true,
     "incremental": true,
     "plugins": [{ "name": "next" }],
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@core/*": ["./src/core/*"],
@@ -40,6 +42,9 @@
     "src/converters",
     "out",
     "dist",
-    "release"
+    "release",
+    "src/core/detect.ts",
+    "src/core/naming.ts",
+    "src/core/fs-helpers.ts"
   ]
 }
