@@ -12,6 +12,7 @@ import { promisify } from 'node:util';
 import type { EnqueueRequest, JobId, ProbeResult } from '@core/types';
 import type { WarpEvent } from '@shared/ipc';
 import { type BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { ALL_CONVERTERS_STUB } from '../runtime/converters-registry-stub';
 import { sanitizeBasename } from '../runtime/naming';
 import { probeFile } from '../runtime/probe';
 import type { Scheduler } from '../runtime/scheduler';
@@ -153,11 +154,19 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return deps.scheduler.availabilitySnapshot();
   });
 
-  ipcMain.handle('warp:optionsFor', async (_e, _target) => {
-    // No converter declares `optionsSchema`/`defaultOptions` yet on this
-    // branch (see src/runtime/converters-registry-stub.ts) — this is the
-    // CommonOptions default until W4/W5 land real converters.
-    return { preserveMetadata: true, deterministic: false };
+  ipcMain.handle('warp:optionsFor', async (_e, target: string) => {
+    // Merge the CommonOptions baseline with the defaults declared by whichever
+    // converters can actually produce `target`. Cheap, and it means the UI's
+    // Options disclosure reflects the real engine rather than a hardcoded guess.
+    const defaults: Record<string, unknown> = {
+      preserveMetadata: true,
+      deterministic: false,
+    };
+    for (const converter of ALL_CONVERTERS_STUB) {
+      if (!converter.outputs.includes(target)) continue;
+      Object.assign(defaults, converter.defaultOptions ?? {});
+    }
+    return defaults;
   });
 
   ipcMain.handle('temp:spill', async (_e, name: string, bytes: ArrayBuffer) => {

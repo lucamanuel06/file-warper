@@ -1,6 +1,22 @@
+import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
 
 const watch = process.argv.includes('--watch');
+const root = fileURLToPath(new URL('..', import.meta.url));
+
+/**
+ * `packages: 'external'` externalises every bare specifier — which would
+ * include our own tsconfig path aliases, so `@converters/index` would be
+ * `require`d at runtime and blow up with MODULE_NOT_FOUND. Rewriting the
+ * aliases to absolute paths here makes esbuild bundle our own source while
+ * still leaving real npm packages external.
+ */
+const alias = {
+  '@core': `${root}src/core`,
+  '@shared': `${root}src/shared`,
+  '@converters': `${root}src/converters`,
+  '@runtime': `${root}src/runtime`,
+};
 
 /**
  * Main and preload are compiled to **CJS**, deliberately:
@@ -21,6 +37,7 @@ const common = {
   format: 'cjs',
   packages: 'external',
   external: ['electron'],
+  alias,
   sourcemap: true,
   minify: !watch,
   logLevel: 'info',

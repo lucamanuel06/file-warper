@@ -1,9 +1,15 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["DOM", "DOM.Iterable", "ES2022"],
-    "types": ["node"],
-    "jsx": "preserve",
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ES2022"
+    ],
+    "types": [
+      "node"
+    ],
+    "jsx": "react-jsx",
     "module": "esnext",
     "moduleResolution": "bundler",
     "strict": true,
@@ -15,13 +21,23 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "incremental": true,
-    "plugins": [{ "name": "next" }],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
     "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
-      "@core/*": ["./src/core/*"],
-      "@shared/*": ["./src/shared/*"],
-      "@ui/*": ["./src/ui/*"]
+      "@core/*": [
+        "./src/core/*"
+      ],
+      "@shared/*": [
+        "./src/shared/*"
+      ],
+      "@ui/*": [
+        "./src/ui/*"
+      ]
     }
   },
   "include": [
