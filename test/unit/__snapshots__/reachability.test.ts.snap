@@ -1,0 +1,49 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`reachability snapshot — small fixed synthetic converter set > matches the committed snapshot 1`] = `
+{
+  "bmp": [
+    "jpeg",
+    "png",
+    "webp",
+  ],
+  "docx": [
+    "html",
+    "md",
+    "pdf",
+  ],
+  "html": [
+    "md",
+    "pdf",
+  ],
+  "jpeg": [
+    "png",
+    "webp",
+  ],
+  "json": [
+    "yaml",
+  ],
+  "md": [
+    "html",
+    "pdf",
+  ],
+  "pdf": [],
+  "png": [
+    "jpeg",
+    "webp",
+  ],
+  "tar": [
+    "zip",
+  ],
+  "webp": [
+    "jpeg",
+    "png",
+  ],
+  "yaml": [
+    "json",
+  ],
+  "zip": [
+    "tar",
+  ],
+}
+`;
