@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ConversionInput, ConvertContext } from '@core/types';
 import { Document, HeadingLevel, Packer, Paragraph, TextRun } from 'docx';
-import { parseHTML } from 'linkedom';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { docxToHtml } from './docx-html';
+import { parseHtml } from './dom';
 
 async function buildFixtureDocx(): Promise<Buffer> {
   const doc = new Document({
@@ -76,11 +76,11 @@ describe('docxToHtml', () => {
     expect(result.bytes).toBeGreaterThan(0);
 
     const html = await readFile(outputPath, 'utf8');
-    const { document } = parseHTML(html);
+    const document = parseHtml(html);
     expect(document.querySelector('h1')?.textContent).toBe('Hello Title');
     const strong = document.querySelector('strong');
     expect(strong?.textContent).toBe('Bold text');
-    expect(document.body.textContent).toContain('normal text');
+    expect(document.body?.textContent).toContain('normal text');
   });
 
   it('surfaces a plain-English error for a corrupt .docx', async () => {

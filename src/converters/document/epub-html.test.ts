@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ConversionInput, ConvertContext } from '@core/types';
 import { strToU8, zipSync } from 'fflate';
-import { parseHTML } from 'linkedom';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { parseHtml } from './dom';
 import { epubToHtml } from './epub-html';
 
 const TINY_PNG = Buffer.from(
@@ -100,7 +100,7 @@ describe('epubToHtml', () => {
     expect(result.meta).toMatchObject({ chapterCount: 2 });
 
     const html = await readFile(outputPath, 'utf8');
-    const { document } = parseHTML(html);
+    const document = parseHtml(html);
     const sections = [...document.querySelectorAll('section')];
     expect(sections).toHaveLength(2);
     expect(sections[0]?.querySelector('h1')?.textContent).toBe('Chapter One');

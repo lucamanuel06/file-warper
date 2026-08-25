@@ -2,8 +2,8 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ConversionInput, ConvertContext } from '@core/types';
-import { parseHTML } from 'linkedom';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { parseHtml } from './dom';
 import { rtfToHtml } from './rtf-html';
 
 const RTF = String.raw`{\rtf1\ansi\deff0
@@ -63,7 +63,7 @@ describe('rtfToHtml', () => {
     expect(result.warnings?.length).toBeGreaterThan(0);
 
     const html = await readFile(outputPath, 'utf8');
-    const { document } = parseHTML(html);
+    const document = parseHtml(html);
     const paragraphs = [...document.querySelectorAll('p')];
     expect(paragraphs).toHaveLength(2);
 
@@ -76,7 +76,7 @@ describe('rtfToHtml', () => {
     expect(html).not.toContain('Msftedit');
 
     // Hex escape decoded to the accented character.
-    expect(document.body.textContent).toContain('café');
+    expect(document.body?.textContent).toContain('café');
   });
 
   it('rejects input that is not RTF at all', async () => {

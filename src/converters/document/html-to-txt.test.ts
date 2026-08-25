@@ -81,6 +81,24 @@ describe('html-to-txt converter', () => {
     expect(text).toContain('https://example.com');
   });
 
+  it('does not uppercase headings — conversion must not alter text', async () => {
+    const html = '<h1>Hello</h1><p>World</p>';
+    const input = makeInput(join(dir, 'in.html'), html);
+    const outputPath = join(dir, 'out.txt');
+
+    await htmlToTxtConverter.convert(
+      input,
+      { path: outputPath, format: 'txt' },
+      {},
+      makeContext(dir),
+    );
+
+    const text = await readFile(outputPath, 'utf8');
+    expect(text).toContain('Hello');
+    expect(text).not.toContain('HELLO');
+    expect(text).toContain('World');
+  });
+
   it('throws a ConversionError when the conversion is already cancelled', async () => {
     const controller = new AbortController();
     controller.abort();

@@ -211,6 +211,7 @@ describe('spreadsheet converters', () => {
       const name = wb.SheetNames[0];
       if (!name) return [];
       const sheet = wb.Sheets[name];
+      if (!sheet) return [];
       return xlsxUtils.sheet_to_json(sheet, {
         header: 1,
         raw: false,

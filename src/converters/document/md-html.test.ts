@@ -2,8 +2,8 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ConversionInput, ConvertContext } from '@core/types';
-import { parseHTML } from 'linkedom';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { parseHtml } from './dom';
 import { mdToHtml } from './md-html';
 
 const MARKDOWN = `# Title
@@ -67,7 +67,7 @@ describe('mdToHtml', () => {
     const html = await readFile(outputPath, 'utf8');
     expect(html).toContain('<!doctype html>');
 
-    const { document } = parseHTML(html);
+    const document = parseHtml(html);
     expect(document.querySelector('h1')?.textContent).toBe('Title');
     expect(document.querySelector('strong')?.textContent).toBe('bold');
     expect(document.querySelector('em')?.textContent).toBe('italic');
