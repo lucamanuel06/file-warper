@@ -90,17 +90,27 @@ jobs:
             git push origin "$TAG"
           fi
 
-          gh release create "$TAG" \
-            release/*.dmg release/*.zip \
-            --title "File Warper $VERSION" \
-            --generate-notes
+          # Idempotent on purpose. `gh release create` hard-fails with
+          # "a release with the same tag name already exists", which is exactly
+          # what happened when a release was published by hand from a laptop
+          # while this workflow was running on the same tag — and it is also
+          # what would happen on any re-run of a partially failed job.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists — uploading assets into it."
+            gh release upload "$TAG" release/*.dmg release/*.zip --clobber
+          else
+            gh release create "$TAG" \
+              release/*.dmg release/*.zip \
+              --title "File Warper $VERSION" \
+              --generate-notes
 
-          # --generate-notes and --notes-file are mutually exclusive, so append
-          # the install instructions to the generated body afterwards.
-          BODY="$(gh release view "$TAG" --json body -q .body)"
-          FOOTER="$(cat .github/RELEASE_NOTES_FOOTER.md)"
-          printf '%s\n\n---\n\n%s\n' "$BODY" "$FOOTER" > /tmp/release-notes.md
-          gh release edit "$TAG" --notes-file /tmp/release-notes.md
+            # --generate-notes and --notes-file are mutually exclusive, so
+            # append the install instructions to the generated body afterwards.
+            BODY="$(gh release view "$TAG" --json body -q .body)"
+            FOOTER="$(cat .github/RELEASE_NOTES_FOOTER.md)"
+            printf '%s\n\n---\n\n%s\n' "$BODY" "$FOOTER" > /tmp/release-notes.md
+            gh release edit "$TAG" --notes-file /tmp/release-notes.md
+          fi
 
       - name: Upload failure artifacts
         if: failure()
