@@ -22,6 +22,34 @@ import type {
   TargetSet,
 } from '@core/types';
 import type { IpcInvokeMap, WarpApi, WarpEvent } from '@shared/ipc';
+import type { AppSettings, UpdateStatus } from '@shared/settings';
+import { DEFAULT_SETTINGS } from '@shared/settings';
+
+const MOCK_SETTINGS_KEY = 'warp:mockSettings';
+
+function loadMockSettings(): AppSettings {
+  try {
+    const raw = localStorage.getItem(MOCK_SETTINGS_KEY);
+    return raw
+      ? { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<AppSettings>) }
+      : {
+          ...DEFAULT_SETTINGS,
+        };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+let mockSettings: AppSettings = loadMockSettings();
+
+function saveMockSettings(next: AppSettings) {
+  mockSettings = next;
+  try {
+    localStorage.setItem(MOCK_SETTINGS_KEY, JSON.stringify(next));
+  } catch {
+    /* best-effort: private mode / quota */
+  }
+}
 
 const registry = new Map<string, { name: string; size: number }>();
 const listeners = new Set<(e: WarpEvent[]) => void>();
@@ -192,6 +220,24 @@ async function invokeImpl(channel: string, ...args: unknown[]): Promise<unknown>
       return undefined;
     case 'app:info':
       return { version: '0.0.0-dev', isPackaged: false };
+    case 'settings:get':
+      return mockSettings;
+    case 'settings:set': {
+      const patch = args[0] as Partial<AppSettings>;
+      saveMockSettings({ ...mockSettings, ...patch });
+      return mockSettings;
+    }
+    case 'update:check': {
+      const status: UpdateStatus = {
+        state: 'current',
+        version: '0.0.0-dev',
+        checkedAt: 0,
+      };
+      return status;
+    }
+    case 'update:open':
+      console.info('[mockBridge] open', args[0]);
+      return undefined;
     default:
       throw new Error(`[mockBridge] unhandled channel: ${channel}`);
   }

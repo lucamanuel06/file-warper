@@ -121,6 +121,27 @@ export function DisclosureIcon({ size = 10, className }: IconProps) {
   );
 }
 
+export function GearIcon({ size = 15, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <circle cx="8" cy="8" r="2.25" stroke="currentColor" strokeWidth="1.3" />
+      <path
+        d="M8 1.5v1.6M8 12.9v1.6M14.5 8h-1.6M3.1 8H1.5M12.5 3.5l-1.13 1.13M4.63 11.37 3.5 12.5M12.5 12.5l-1.13-1.13M4.63 4.63 3.5 3.5"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 export function WarningIcon({ size = 16, className }: IconProps) {
   return (
     <svg
