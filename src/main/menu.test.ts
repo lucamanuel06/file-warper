@@ -44,10 +44,10 @@ describe('buildMenuTemplate', () => {
     // Non-null rather than `?.` here: if the template is empty the test must
     // fail loudly on the line above, not silently coerce to undefined.
     const appMenu = template[0];
-    expect(appMenu?.submenu).toBeDefined();
-    const roles = (appMenu?.submenu as MenuItemConstructorOptionsLike[]).map(
-      (i) => i.role,
-    );
+    expect(appMenu).toBeDefined();
+    const submenu = appMenu?.submenu as MenuItemConstructorOptionsLike[] | undefined;
+    expect(submenu).toBeDefined();
+    const roles = (submenu ?? []).map((i) => i.role);
     expect(roles).toContain('about');
     expect(roles).toContain('quit');
     expect(roles).toContain('hide');
