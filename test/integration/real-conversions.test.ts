@@ -63,10 +63,19 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
-  // maxRetries: on Windows a file sharp or ffmpeg just touched can stay locked
-  // for a moment, and the delete fails with EBUSY. CI hit exactly that.
-  if (dir) await rm(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 60 });
-});
+  // On Windows a file sharp or ffmpeg just touched can stay locked briefly, so
+  // this delete can fail with EBUSY, and Node's retry backoff can outlast the
+  // default 10s hook timeout. Neither is worth failing the run over: the value
+  // of this suite is in the conversions above, and the OS reaps its own temp
+  // directory regardless. The app's own cleanup DOES retry properly — see
+  // RM_OPTS in src/runtime/temp.ts, where a leaked intermediate would matter.
+  if (!dir) return;
+  try {
+    await rm(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  } catch (err) {
+    console.warn(`[integration] could not remove ${dir}: ${(err as Error).message}`);
+  }
+}, 30_000);
 
 function ctx(): ConvertContext {
   return {
