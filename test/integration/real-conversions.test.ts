@@ -63,7 +63,9 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
-  if (dir) await rm(dir, { recursive: true, force: true });
+  // maxRetries: on Windows a file sharp or ffmpeg just touched can stay locked
+  // for a moment, and the delete fails with EBUSY. CI hit exactly that.
+  if (dir) await rm(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 60 });
 });
 
 function ctx(): ConvertContext {

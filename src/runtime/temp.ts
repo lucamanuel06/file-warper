@@ -12,6 +12,21 @@ import os from 'node:os';
 import path from 'node:path';
 import { app } from 'electron';
 
+/**
+ * Windows keeps a just-written or just-read file locked for a moment — libvips
+ * and ffmpeg both hit this — so a delete can fail with EBUSY/EPERM even though
+ * nothing is really wrong. CI caught it: removing a sharp output raised
+ * "EBUSY: resource busy or locked" on windows-latest while macOS and Linux were
+ * clean. Node's own retry loop is the documented remedy; it is a no-op on
+ * platforms that do not need it.
+ */
+const RM_OPTS = {
+  recursive: true,
+  force: true,
+  maxRetries: 8,
+  retryDelay: 60,
+} as const;
+
 const ROOT_NAME = 'file-warper';
 const SESSION_PREFIX = 's-';
 const STALE_SESSION_MS = 24 * 60 * 60 * 1000;
@@ -46,7 +61,7 @@ export async function jobDir(jobId: string): Promise<string> {
 /** Per-job cleanup. Callers MUST invoke this in a `finally`, win or lose. */
 export async function cleanupJobDir(jobId: string): Promise<void> {
   const dir = path.join(sessionRoot(), `job-${jobId}`);
-  await fsp.rm(dir, { recursive: true, force: true }).catch(() => {});
+  await fsp.rm(dir, RM_OPTS).catch(() => {});
 }
 
 function parseSessionDirName(name: string): { pid: number; startedAt: number } | null {
@@ -91,9 +106,7 @@ export async function sweepStaleSessions(): Promise<void> {
       const dead = !isPidAlive(parsed.pid);
       const stale = now - parsed.startedAt > STALE_SESSION_MS;
       if (dead || stale) {
-        await fsp
-          .rm(path.join(root, name), { recursive: true, force: true })
-          .catch(() => {});
+        await fsp.rm(path.join(root, name), RM_OPTS).catch(() => {});
       }
     }),
   );
@@ -101,13 +114,13 @@ export async function sweepStaleSessions(): Promise<void> {
 
 /** `will-quit` handler: remove this session's whole root. */
 export async function removeSessionRoot(): Promise<void> {
-  await fsp.rm(sessionRoot(), { recursive: true, force: true }).catch(() => {});
+  await fsp.rm(sessionRoot(), RM_OPTS).catch(() => {});
 }
 
 /** `process.on('exit')` handler. Must be sync — async work never runs there. */
 export function removeSessionRootSync(): void {
   try {
-    fs.rmSync(sessionRoot(), { recursive: true, force: true });
+    fs.rmSync(sessionRoot(), RM_OPTS);
   } catch {
     // best-effort
   }
@@ -156,7 +169,10 @@ export async function commitStaged(stagedPath: string, finalPath: string): Promi
 
 /** Cleans up a staged file that never got committed (cancel/failure path). */
 export async function discardStaged(stagedPath: string): Promise<void> {
-  await fsp.unlink(stagedPath).catch(() => {});
+  // `rm` rather than `unlink`: it takes the Windows retry options (see RM_OPTS).
+  await fsp
+    .rm(stagedPath, { force: true, maxRetries: 8, retryDelay: 60 })
+    .catch(() => {});
 }
 
 /**
