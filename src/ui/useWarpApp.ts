@@ -10,6 +10,7 @@ import type {
   TargetSet,
 } from '@core/types';
 import type { WarpEvent } from '@shared/ipc';
+import type { AppSettings } from '@shared/settings';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EnvironmentIssue, Phase, SaveLocation, StagedFile } from './types';
 import { defaultOptionsFor } from './utils/optionsConfig';
@@ -68,17 +69,26 @@ function outputLocationFrom(saveLocation: SaveLocation): OutputLocation {
     : { mode: 'fixed', dir: saveLocation.dir };
 }
 
+/** The per-job "Save to" override (Options disclosure) starts from the global setting. */
+function defaultSaveLocation(settings: AppSettings): SaveLocation {
+  return settings.outputMode === 'fixed' && settings.outputDir
+    ? { mode: 'folder', dir: settings.outputDir }
+    : { mode: 'same' };
+}
+
 let idSeq = 0;
 const nextId = () => `f${idSeq++}`;
 
-export function useWarpApp() {
+export function useWarpApp(settings: AppSettings, settingsOpen: boolean) {
   const [phase, setPhase] = useState<Phase>('empty');
   const [files, setFiles] = useState<StagedFile[]>([]);
   const [target, setTarget] = useState<FormatId | null>(null);
   const [targetSet, setTargetSet] = useState<TargetSet | null>(null);
   const [optionsExpanded, setOptionsExpanded] = useState(false);
   const [optionValues, setOptionValues] = useState<ConverterOptions>({});
-  const [saveLocation, setSaveLocation] = useState<SaveLocation>({ mode: 'same' });
+  const [saveLocation, setSaveLocation] = useState<SaveLocation>(() =>
+    defaultSaveLocation(settings),
+  );
   const [dragActive, setDragActive] = useState(false);
   const [batchId, setBatchId] = useState<string | null>(null);
   const [progressByJob, setProgressByJob] = useState<Record<string, number>>({});
@@ -94,6 +104,9 @@ export function useWarpApp() {
   optionValuesRef.current = optionValues;
   const batchIdRef = useRef(batchId);
   batchIdRef.current = batchId;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const lastOutputPathRef = useRef<string | null>(null);
 
   const resetAll = useCallback(() => {
     setPhase('empty');
@@ -103,8 +116,15 @@ export function useWarpApp() {
     setBatchId(null);
     setProgressByJob({});
     setEnvironmentIssue(null);
-    setSaveLocation({ mode: 'same' });
+    setSaveLocation(defaultSaveLocation(settingsRef.current));
   }, []);
+
+  // Re-sync the default "Save to" location while idle, so a change made in
+  // Settings (or Settings finishing its async load) takes effect for the next
+  // batch without clobbering an in-session per-job override.
+  useEffect(() => {
+    if (phase === 'empty') setSaveLocation(defaultSaveLocation(settings));
+  }, [settings, phase]);
 
   const applyTargetSelection = useCallback(
     async (newTarget: FormatId, ts: TargetSet | null, fileList: StagedFile[]) => {
@@ -291,30 +311,40 @@ export function useWarpApp() {
     [],
   );
 
+  const buildEnqueueRequest = useCallback(
+    (paths: string[], target: FormatId): EnqueueRequest => ({
+      paths,
+      target,
+      options: {
+        ...optionValuesRef.current,
+        preserveMetadata: settingsRef.current.preserveMetadata,
+      },
+      output: outputLocationFrom(saveLocationRef.current),
+      collision: settingsRef.current.collision,
+    }),
+    [],
+  );
+
   const convert = useCallback(async () => {
     if (phase !== 'staged' || !targetRef.current) return;
-    const req: EnqueueRequest = {
-      paths: filesRef.current.map((f) => f.path),
-      target: targetRef.current,
-      options: optionValuesRef.current,
-      output: outputLocationFrom(saveLocationRef.current),
-    };
+    const req = buildEnqueueRequest(
+      filesRef.current.map((f) => f.path),
+      targetRef.current,
+    );
     const { batchId: id, jobs } = await window.warp.invoke('warp:enqueue', req);
     applyEnqueueResult(id, jobs);
-  }, [phase, applyEnqueueResult]);
+  }, [phase, applyEnqueueResult, buildEnqueueRequest]);
 
   const retryFailed = useCallback(async () => {
     const failed = filesRef.current.filter((f) => f.state === 'failed');
     if (failed.length === 0 || !targetRef.current) return;
-    const req: EnqueueRequest = {
-      paths: failed.map((f) => f.path),
-      target: targetRef.current,
-      options: optionValuesRef.current,
-      output: outputLocationFrom(saveLocationRef.current),
-    };
+    const req = buildEnqueueRequest(
+      failed.map((f) => f.path),
+      targetRef.current,
+    );
     const { batchId: id, jobs } = await window.warp.invoke('warp:enqueue', req);
     applyEnqueueResult(id, jobs);
-  }, [applyEnqueueResult]);
+  }, [applyEnqueueResult, buildEnqueueRequest]);
 
   const cancel = useCallback(() => {
     if (batchIdRef.current)
@@ -359,7 +389,15 @@ export function useWarpApp() {
         for (const e of additions) next[e.jobId] = e.progress;
         return next;
       });
-      if (events.some((e) => e.t === 'batch:done')) setPhase('done');
+      for (const e of events) {
+        if (e.t === 'job:done') lastOutputPathRef.current = e.outputPath;
+      }
+      if (events.some((e) => e.t === 'batch:done')) {
+        setPhase('done');
+        if (settingsRef.current.revealWhenDone && lastOutputPathRef.current) {
+          void window.warp.invoke('shell:reveal', lastOutputPathRef.current);
+        }
+      }
     });
     return off;
   }, []);
@@ -375,9 +413,11 @@ export function useWarpApp() {
     };
   }, []);
 
-  // Esc priority: collapse Options -> cancel conversion. Never clears a staged list.
+  // Esc priority: settings sheet (owns its own Esc handling) -> collapse
+  // Options -> cancel conversion. Never clears a staged list.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      if (settingsOpen) return;
       if (e.key === 'Escape') {
         if (optionsExpanded) {
           setOptionsExpanded(false);
@@ -396,7 +436,7 @@ export function useWarpApp() {
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [optionsExpanded, phase, cancel, convert]);
+  }, [optionsExpanded, phase, cancel, convert, settingsOpen]);
 
   // Environment-level banner: only when EVERY attempted job failed with the same error code.
   useEffect(() => {

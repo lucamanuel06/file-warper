@@ -4,6 +4,7 @@ import type { ConverterOptions, FormatCategory, FormatDef } from '@core/types';
 import { DisclosureIcon } from '../../icons';
 import type { SaveLocation } from '../../types';
 import { type ControlDescriptor, getCategoryControls } from '../../utils/optionsConfig';
+import { Segmented, SelectField, Switch } from '../Controls/Controls';
 import styles from './OptionsDisclosure.module.css';
 
 interface OptionsDisclosureProps {
@@ -30,54 +31,26 @@ function Control({
 }) {
   if (descriptor.kind === 'segmented') {
     return (
-      <div className={styles.segmented} role="radiogroup" aria-label={descriptor.label}>
-        {descriptor.choices.map((choice) => (
-          <label
-            key={choice.value}
-            className={`${styles.segmentButton} ${value === choice.value ? styles.segmentActive : ''}`}
-          >
-            <input
-              type="radio"
-              className={styles.segmentInput}
-              name={descriptor.key}
-              value={choice.value}
-              checked={value === choice.value}
-              onChange={() => onChange(choice.value)}
-            />
-            <span>{choice.label}</span>
-          </label>
-        ))}
-      </div>
+      <Segmented
+        name={descriptor.key}
+        label={descriptor.label}
+        value={value as string}
+        choices={descriptor.choices}
+        onChange={onChange}
+      />
     );
   }
   if (descriptor.kind === 'select') {
     return (
-      <select
-        className={styles.select}
+      <SelectField
+        label={descriptor.label}
         value={value as string}
-        aria-label={descriptor.label}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        {descriptor.choices.map((choice) => (
-          <option key={choice.value} value={choice.value}>
-            {choice.label}
-          </option>
-        ))}
-      </select>
+        choices={descriptor.choices}
+        onChange={onChange}
+      />
     );
   }
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={!!value}
-      aria-label={descriptor.label}
-      className={`${styles.switch} ${value ? styles.switchOn : ''}`}
-      onClick={() => onChange(!value)}
-    >
-      <span className={styles.switchKnob} />
-    </button>
-  );
+  return <Switch label={descriptor.label} checked={!!value} onChange={onChange} />;
 }
 
 export function OptionsDisclosure({

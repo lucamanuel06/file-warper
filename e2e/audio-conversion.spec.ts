@@ -27,18 +27,30 @@ test('converts a real WAV to MP3 through the app, on a path with spaces', async 
   await mkdir(dir, { recursive: true });
   const wav = join(dir, 'B2B Rens set.wav');
   await run(ffmpeg, [
-    '-y', '-loglevel', 'error',
-    '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1',
-    '-ar', '44100', '-ac', '2', wav,
+    '-y',
+    '-loglevel',
+    'error',
+    '-f',
+    'lavfi',
+    '-i',
+    'sine=frequency=440:duration=1',
+    '-ar',
+    '44100',
+    '-ac',
+    '2',
+    wav,
   ]);
 
   const app = await electron.launch({ args: ['.'], env: { ...process.env, E2E: '1' } });
   const win = await app.firstWindow();
   await win.waitForLoadState('domcontentloaded');
-  await app.evaluate(({ dialog }, files) => {
-    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: files });
-    dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
-  }, [wav]);
+  await app.evaluate(
+    ({ dialog }, files) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: files });
+      dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
+    },
+    [wav],
+  );
 
   await win.getByTestId('dropzone').click();
   await expect(win.getByTestId('file-row')).toHaveCount(1);

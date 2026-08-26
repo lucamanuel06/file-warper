@@ -5,8 +5,11 @@ import { ErrorBanner } from '@ui/components/ErrorBanner/ErrorBanner';
 import { FileList } from '@ui/components/FileList/FileList';
 import { Footer } from '@ui/components/Footer/Footer';
 import { OptionsDisclosure } from '@ui/components/OptionsDisclosure/OptionsDisclosure';
+import { SettingsSheet } from '@ui/components/SettingsSheet/SettingsSheet';
 import { TitleBar } from '@ui/components/TitleBar/TitleBar';
+import { UpdateBar } from '@ui/components/UpdateBar/UpdateBar';
 import { installMockBridge } from '@ui/mockBridge';
+import { useSettings } from '@ui/useSettings';
 import { useWarpApp } from '@ui/useWarpApp';
 import { buildTargetGroups } from '@ui/utils/targetGroups';
 import styles from './page.module.css';
@@ -14,13 +17,25 @@ import styles from './page.module.css';
 installMockBridge();
 
 export default function Page() {
-  const app = useWarpApp();
+  const settingsState = useSettings();
+  const app = useWarpApp(settingsState.settings, settingsState.sheetOpen);
   const targetGroups = buildTargetGroups(app.targetSet, app.target);
+  const available =
+    settingsState.updateStatus.state === 'available' ? settingsState.updateStatus : null;
 
   return (
     <div className={styles.window}>
-      <TitleBar />
+      <TitleBar ref={settingsState.gearRef} onOpenSettings={settingsState.openSheet} />
       <main className={styles.content} data-testid="content">
+        {settingsState.updateBarVisible && available && (
+          <UpdateBar
+            version={available.latest}
+            onDownload={() =>
+              settingsState.openLink(available.downloadUrl ?? available.url)
+            }
+            onDismiss={settingsState.dismissUpdate}
+          />
+        )}
         {app.environmentIssue && <ErrorBanner issue={app.environmentIssue} />}
         {app.phase === 'empty' ? (
           <DropZone
@@ -82,6 +97,19 @@ export default function Page() {
           />
         </>
       )}
+
+      <SettingsSheet
+        open={settingsState.sheetOpen}
+        settings={settingsState.settings}
+        appVersion={settingsState.appVersion}
+        updateStatus={settingsState.updateStatus}
+        onPatch={settingsState.patch}
+        onClose={settingsState.closeSheet}
+        onChooseFolder={() => void settingsState.chooseFolder()}
+        onClearFolder={settingsState.clearFolder}
+        onCheckNow={() => void settingsState.checkNow()}
+        onOpenLink={settingsState.openLink}
+      />
     </div>
   );
 }
