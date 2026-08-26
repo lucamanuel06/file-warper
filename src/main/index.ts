@@ -1,14 +1,23 @@
 import path from 'node:path';
 import { probeFile } from '@core/detect';
-import { app, BrowserWindow, systemPreferences } from 'electron';
+import { app, BrowserWindow, nativeTheme, systemPreferences } from 'electron';
 import { MainHopRunner } from '../runtime/main-runner';
 import { WorkerPool } from '../runtime/pool';
 import { Scheduler } from '../runtime/scheduler';
 import * as temp from '../runtime/temp';
 import { registerIpcHandlers, startEventPump } from './ipc';
-import { installMenu } from './menu';
+import { dispatchUpdateStatus, installMenu } from './menu';
 import { APP_ORIGIN, registerScheme, serveExport } from './protocol';
+import * as settings from './settings';
+import { checkForUpdates } from './updates';
 import { loadWindowState, saveWindowState } from './window-state';
+
+/** Automatic check runs after first paint, never blocking it. */
+const AUTOMATIC_UPDATE_CHECK_DELAY_MS = 4_000;
+
+function syncNativeTheme(): void {
+  nativeTheme.themeSource = settings.get().theme;
+}
 
 // MUST run at module top level, before `app.whenReady()`, exactly once.
 registerScheme();
@@ -113,6 +122,10 @@ function createWindow(): BrowserWindow {
 async function main(): Promise<void> {
   await app.whenReady();
 
+  settings.load();
+  syncNativeTheme();
+  settings.onChange(syncNativeTheme);
+
   await temp.sweepStaleSessions();
   temp.registerTempCleanupHooks();
 
@@ -133,11 +146,20 @@ async function main(): Promise<void> {
   registerIpcHandlers({ getWindow: () => mainWindow, scheduler });
   const stopEventPump = startEventPump(scheduler, () => mainWindow);
 
+  const updateCheckTimer = setTimeout(() => {
+    void checkForUpdates({ manual: false }).then((status) => {
+      if (status.state === 'available' && mainWindow && !mainWindow.isDestroyed()) {
+        dispatchUpdateStatus(mainWindow, status);
+      }
+    });
+  }, AUTOMATIC_UPDATE_CHECK_DELAY_MS);
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow();
   });
 
   app.on('before-quit', () => {
+    clearTimeout(updateCheckTimer);
     stopEventPump();
     scheduler.shutdownAll();
     pool.shutdown();

@@ -13,11 +13,24 @@ import { ALL_CONVERTERS } from '@converters/index';
 import { probeFile } from '@core/detect';
 import type { EnqueueRequest, JobId, ProbeResult } from '@core/types';
 import type { WarpEvent } from '@shared/ipc';
+import type { AppSettings } from '@shared/settings';
 import { type BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { sanitizeBasename } from '../runtime/naming';
 import type { Scheduler } from '../runtime/scheduler';
 import * as temp from '../runtime/temp';
 import { resolveBinary } from './resolveBinary';
+import * as settings from './settings';
+import { checkForUpdates } from './updates';
+
+/** Only ever pass a validated URL to `shell.openExternal` — never a raw string. */
+function isAllowedExternalUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw);
+    return url.protocol === 'https:' && url.hostname === 'github.com';
+  } catch {
+    return false;
+  }
+}
 
 const execFileAsync = promisify(execFile);
 const FLUSH_INTERVAL_MS = 100;
@@ -185,6 +198,23 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   ipcMain.handle('app:info', async () => {
     const { app } = await import('electron');
     return { version: app.getVersion(), isPackaged: app.isPackaged };
+  });
+
+  ipcMain.handle('settings:get', async () => settings.get());
+
+  ipcMain.handle('settings:set', async (_e, patch: Partial<AppSettings>) =>
+    settings.patch(patch),
+  );
+
+  ipcMain.handle('update:check', async (_e, opts?: { manual?: boolean }) =>
+    checkForUpdates(opts),
+  );
+
+  ipcMain.handle('update:open', async (_e, url: string) => {
+    if (!isAllowedExternalUrl(url)) {
+      throw new Error('Refusing to open a non-GitHub URL.');
+    }
+    await shell.openExternal(url);
   });
 }
 

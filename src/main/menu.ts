@@ -8,14 +8,18 @@
  * need the renderer's attention dispatch a `CustomEvent` into the page via
  * `executeJavaScript` — plain DOM events, not a new IPC surface. W3 should
  * add `window.addEventListener(...)` for:
- *   - 'warp:menu-open-files'  detail: string[]  (absolute paths to stage)
- *   - 'warp:menu-clear'       (no detail)        clear the staged list
- *   - 'warp:menu-reveal'      (no detail)        reveal last output, done state only
- *   - 'warp:menu-settings'    (no detail)        open settings, if/when it exists
+ *   - 'warp:menu-open-files'    detail: string[]      (absolute paths to stage)
+ *   - 'warp:menu-clear'         (no detail)             clear the staged list
+ *   - 'warp:menu-reveal'        (no detail)             reveal last output, done state only
+ *   - 'warp:menu-settings'      (no detail)             open settings, if/when it exists
+ *   - 'warp:update-available'   detail: UpdateStatus   state is 'available' or 'error'
+ *   - 'warp:update-current'     detail: UpdateStatus   state is 'current' ("you're up to date")
  */
 
+import type { UpdateStatus } from '@shared/settings';
 import { app, type BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron';
 import { pickFiles } from './ipc';
+import { checkForUpdates } from './updates';
 
 function dispatch(win: BrowserWindow, eventName: string, detail?: unknown): void {
   if (win.isDestroyed()) return;
@@ -23,9 +27,23 @@ function dispatch(win: BrowserWindow, eventName: string, detail?: unknown): void
   win.webContents.executeJavaScript(script).catch(() => {});
 }
 
+/** Routes an `UpdateStatus` to the right renderer event by its `state`. */
+export function dispatchUpdateStatus(win: BrowserWindow, status: UpdateStatus): void {
+  dispatch(
+    win,
+    status.state === 'current' ? 'warp:update-current' : 'warp:update-available',
+    status,
+  );
+}
+
 async function handleOpen(win: BrowserWindow): Promise<void> {
   const paths = await pickFiles(win);
   if (paths.length > 0) dispatch(win, 'warp:menu-open-files', paths);
+}
+
+async function handleCheckForUpdates(win: BrowserWindow): Promise<void> {
+  const status = await checkForUpdates({ manual: true });
+  dispatchUpdateStatus(win, status);
 }
 
 export function buildMenu(getWindow: () => BrowserWindow | null): Menu {
@@ -44,6 +62,10 @@ export function buildMenu(getWindow: () => BrowserWindow | null): Menu {
           label: 'Settings…',
           accelerator: 'Cmd+,',
           click: () => withWindow((win) => dispatch(win, 'warp:menu-settings')),
+        },
+        {
+          label: 'Check for Updates…',
+          click: () => withWindow((win) => void handleCheckForUpdates(win)),
         },
         { type: 'separator' },
         { role: 'hide' },
@@ -110,4 +132,9 @@ export function buildMenu(getWindow: () => BrowserWindow | null): Menu {
 
 export function installMenu(getWindow: () => BrowserWindow | null): void {
   Menu.setApplicationMenu(buildMenu(getWindow));
+  app.setAboutPanelOptions({
+    applicationName: app.name,
+    applicationVersion: app.getVersion(),
+    version: app.getVersion(),
+  });
 }
