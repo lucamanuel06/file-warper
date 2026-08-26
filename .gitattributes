@@ -1,0 +1,31 @@
+# Always check out text files with LF, on every platform.
+#
+# Without this, Git on Windows checks files out as CRLF, and Biome's formatter
+# then reports every single file as needing reformatting — which failed
+# `npm run verify` on windows-latest while passing on macOS and Linux. The
+# formatter is right; the working copy was wrong.
+* text=auto eol=lf
+
+# Never touch binaries. The committed icons and fixtures would be corrupted by
+# line-ending normalisation.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.icns.d binary
+*.zip binary
+*.dmg binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.pdf binary
+*.mp3 binary
+*.mp4 binary
+*.wav binary
+
+# Generated, and noisy in review.
+package-lock.json linguist-generated=true
