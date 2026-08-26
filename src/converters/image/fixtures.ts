@@ -1,4 +1,4 @@
-import sharp from 'sharp';
+import { sharp } from './sharp-init';
 
 const RAW_2X2 = Buffer.from([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0]);
 

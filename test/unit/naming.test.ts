@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { resolveOutputPath } from '@core/naming';
 import type { OutputLocation } from '@core/types';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -179,7 +179,7 @@ describe('resolveOutputPath — sanitisation', () => {
     const longStem = 'a'.repeat(400);
     const input = join(dir, `${longStem}.heic`);
     const out = resolveOutputPath(input, 'webp', alongside(), new Set()) as string;
-    const filename = out.slice(out.lastIndexOf('/') + 1);
+    const filename = basename(out);
     expect(Buffer.byteLength(filename, 'utf8')).toBeLessThanOrEqual(255);
     expect(filename.endsWith('.webp')).toBe(true);
   });
@@ -188,7 +188,7 @@ describe('resolveOutputPath — sanitisation', () => {
     const longStem = '日'.repeat(200); // 3 bytes each in UTF-8
     const input = join(dir, `${longStem}.heic`);
     const out = resolveOutputPath(input, 'webp', alongside(), new Set()) as string;
-    const filename = out.slice(out.lastIndexOf('/') + 1);
+    const filename = basename(out);
     expect(Buffer.byteLength(filename, 'utf8')).toBeLessThanOrEqual(255);
     // Round-trips through Buffer without the replacement character.
     expect(filename.includes('�')).toBe(false);

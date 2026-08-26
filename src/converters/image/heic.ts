@@ -1,7 +1,7 @@
 import type { Converter } from '@core/types';
 import { ConversionError } from '@core/types';
 import decode from 'heic-decode';
-import sharp from 'sharp';
+import { sharp } from './sharp-init';
 
 export const heicDecode: Converter = {
   id: 'heic-decode:png',

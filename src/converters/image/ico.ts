@@ -1,7 +1,7 @@
 import type { Converter } from '@core/types';
 import { ConversionError } from '@core/types';
-import sharp from 'sharp';
 import { decode, sharpsToIco } from 'sharp-ico';
+import { sharp } from './sharp-init';
 
 const ICO_SIZES = [16, 32, 48, 128, 256];
 

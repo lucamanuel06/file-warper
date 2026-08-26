@@ -1,6 +1,6 @@
 import type { Converter, FormatId } from '@core/types';
 import { ConversionError } from '@core/types';
-import sharp from 'sharp';
+import { sharp } from './sharp-init';
 
 const INPUTS = ['jpeg', 'png', 'webp', 'avif', 'gif', 'tiff', 'svg'] as const;
 const OUTPUTS = ['jpeg', 'png', 'webp', 'avif', 'gif', 'tiff'] as const;

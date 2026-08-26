@@ -1,8 +1,8 @@
 import type { Converter } from '@core/types';
 import { ConversionError } from '@core/types';
 import { readPsd } from 'ag-psd';
-import sharp from 'sharp';
 import { ensureCanvasShim } from './psd-canvas-shim';
+import { sharp } from './sharp-init';
 
 export const psdDecode: Converter = {
   id: 'ag-psd:png',

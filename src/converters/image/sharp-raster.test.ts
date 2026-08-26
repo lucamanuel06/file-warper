@@ -1,6 +1,5 @@
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   animatedFixture,
@@ -8,6 +7,7 @@ import {
   rotatedJpegFixture,
   SVG_FIXTURE,
 } from './fixtures';
+import { sharp } from './sharp-init';
 import { sharpRaster } from './sharp-raster';
 import { cleanupDir, fakeContext, fakeInput, makeTempDir } from './test-helpers';
 

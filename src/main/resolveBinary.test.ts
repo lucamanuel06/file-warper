@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { osFolder, sidecarPath } from './resolveBinary';
 
@@ -8,6 +9,11 @@ import { osFolder, sidecarPath } from './resolveBinary';
  *   this module                  (reads them at runtime)
  * A mismatch shows up only as "Missing sidecar binary" at runtime, on one
  * platform, so pin it here.
+ *
+ * Expectations go through `path.join` rather than POSIX string literals: the
+ * function under test uses `path.join`, so on Windows it correctly returns
+ * backslashes. Hardcoded forward slashes made this suite fail on
+ * windows-latest while passing on macOS — the test was wrong, not the code.
  */
 describe('osFolder', () => {
   it("uses electron-builder's vocabulary, not process.platform's", () => {
@@ -32,16 +38,16 @@ describe('sidecarPath', () => {
 
   it('resolves flat under resourcesPath when packaged', () => {
     expect(sidecarPath('ffmpeg', packagedOpts('darwin'))).toBe(
-      '/app/Resources/bin/ffmpeg',
+      path.join('/app/Resources', 'bin', 'ffmpeg'),
     );
   });
 
   it('appends .exe on Windows, and only on Windows', () => {
     expect(sidecarPath('ffprobe', packagedOpts('win32'))).toBe(
-      '/app/Resources/bin/ffprobe.exe',
+      path.join('/app/Resources', 'bin', 'ffprobe.exe'),
     );
     expect(sidecarPath('ffprobe', packagedOpts('linux'))).toBe(
-      '/app/Resources/bin/ffprobe',
+      path.join('/app/Resources', 'bin', 'ffprobe'),
     );
   });
 
@@ -54,7 +60,7 @@ describe('sidecarPath', () => {
         resourcesPath: '/unused',
         appPath: '/repo',
       }),
-    ).toBe('/repo/resources/bin/mac/arm64/7za');
+    ).toBe(path.join('/repo', 'resources', 'bin', 'mac', 'arm64', '7za'));
 
     expect(
       sidecarPath('ffmpeg', {
@@ -64,7 +70,7 @@ describe('sidecarPath', () => {
         resourcesPath: '/unused',
         appPath: '/repo',
       }),
-    ).toBe('/repo/resources/bin/win/x64/ffmpeg.exe');
+    ).toBe(path.join('/repo', 'resources', 'bin', 'win', 'x64', 'ffmpeg.exe'));
 
     expect(
       sidecarPath('ffmpeg', {
@@ -74,6 +80,6 @@ describe('sidecarPath', () => {
         resourcesPath: '/unused',
         appPath: '/repo',
       }),
-    ).toBe('/repo/resources/bin/linux/x64/ffmpeg');
+    ).toBe(path.join('/repo', 'resources', 'bin', 'linux', 'x64', 'ffmpeg'));
   });
 });

@@ -44,18 +44,22 @@ test('renders the empty state with the footer and options row hidden', async () 
   await expect(win.getByTestId('options-disclosure')).toBeHidden();
 });
 
-test('exposes the host platform on <html> and keeps macOS chrome pixel-identical', async () => {
-  // This suite only runs on macOS here — confirms the cross-platform chrome
-  // work (Windows titleBarOverlay, Linux frame:true) left darwin untouched.
-  expect(await app.evaluate(() => process.platform)).toBe('darwin');
+test('exposes the host platform on <html>, whichever platform that is', async () => {
+  // Asserted against the ACTUAL host, not a hardcoded 'darwin'. The original
+  // version pinned darwin and therefore failed the moment CI started running
+  // this suite on ubuntu — the test was wrong, not the app.
+  const hostPlatform = await app.evaluate(() => process.platform);
 
   // Set async, off the `dom-ready` event — wait rather than race it.
   await win.waitForFunction(() => document.documentElement.hasAttribute('data-platform'));
   const platform = await win.evaluate(() =>
     document.documentElement.getAttribute('data-platform'),
   );
-  expect(platform).toBe('darwin');
+  expect(platform).toBe(hostPlatform);
 
+  // The settings entry point must exist on every platform. On Windows the
+  // gear has to clear the window-controls overlay; on Linux the desktop draws
+  // the frame — either way the button is present and usable.
   await expect(win.getByTestId('settings-button')).toBeVisible();
   await expect(win.getByTestId('settings-button')).toBeEnabled();
 });

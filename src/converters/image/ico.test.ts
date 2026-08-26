@@ -1,9 +1,9 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import sharp from 'sharp';
 import { decode } from 'sharp-ico';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ico } from './ico';
+import { sharp } from './sharp-init';
 import { cleanupDir, fakeContext, fakeInput, makeTempDir } from './test-helpers';
 
 let dir: string;

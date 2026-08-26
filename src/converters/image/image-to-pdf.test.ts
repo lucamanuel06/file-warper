@@ -1,10 +1,10 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { PDFDocument } from '@cantoo/pdf-lib';
-import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { rasterFixture } from './fixtures';
 import { imageToPdf } from './image-to-pdf';
+import { sharp } from './sharp-init';
 import { cleanupDir, fakeContext, fakeInput, makeTempDir } from './test-helpers';
 
 let dir: string;

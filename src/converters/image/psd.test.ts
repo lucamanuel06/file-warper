@@ -1,10 +1,10 @@
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { writePsd } from 'ag-psd';
-import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { psdDecode } from './psd';
 import { ensureCanvasShim } from './psd-canvas-shim';
+import { sharp } from './sharp-init';
 import { cleanupDir, fakeContext, fakeInput, makeTempDir } from './test-helpers';
 
 let dir: string;
