@@ -1,15 +1,9 @@
-/**
- * Requires the fully integrated app (the main-process `settings:get` /
- * `settings:set` / `update:check` / `update:open` handlers) — cannot run
- * standalone in this worktree. Written against the harness pattern in
- * docs/spec-ui.md §6; once the main-process agent's IPC handlers land, this
- * should launch through `e2e/harness/launch.ts` like the other specs.
- */
 /// <reference lib="dom" />
 import {
   type ElectronApplication,
   _electron as electron,
   expect,
+  type Locator,
   type Page,
   test,
 } from '@playwright/test';
@@ -32,6 +26,20 @@ test.afterAll(async () => {
   await app.close();
 });
 
+/**
+ * Opens the sheet and waits past its `--dur-base` slide-down transition.
+ * `toBeVisible()` only waits for the opening CSS state to apply, not for the
+ * transition to finish interpolating — any test that reads geometry off the
+ * sheet needs the settled position, not a mid-animation snapshot.
+ */
+async function openSettings(): Promise<Locator> {
+  await win.getByTestId('settings-button').click();
+  const sheet = win.getByTestId('settings-sheet');
+  await expect(sheet).toBeVisible();
+  await win.waitForTimeout(250);
+  return sheet;
+}
+
 test('the gear button opens the settings sheet, Esc closes it', async () => {
   await expect(win.getByTestId('settings-sheet')).toBeHidden();
   await win.getByTestId('settings-button').click();
@@ -48,8 +56,32 @@ test('Cmd+, opens the settings sheet via the warp:menu-settings event', async ()
   });
   await expect(win.getByTestId('settings-sheet')).toBeVisible();
 
-  await win.getByTestId('settings-backdrop').click({ position: { x: 5, y: 5 } });
+  await win.keyboard.press('Escape');
   await expect(win.getByTestId('settings-sheet')).toBeHidden();
+});
+
+test('the sheet leaves the backdrop reachable, and clicking it closes the sheet', async () => {
+  const sheet = await openSettings();
+  const backdrop = win.getByTestId('settings-backdrop');
+
+  const sheetBox = await sheet.boundingBox();
+  const backdropBox = await backdrop.boundingBox();
+  if (!sheetBox || !backdropBox) {
+    throw new Error('expected both the sheet and the backdrop to have a layout box');
+  }
+
+  // Pin: the sheet must never grow to fill the whole backdrop — that makes
+  // "click outside to close" impossible everywhere on screen. Regression
+  // coverage for exactly that defect.
+  expect(sheetBox.height).toBeLessThan(backdropBox.height);
+
+  // Click inside the guaranteed-visible strip below the sheet's bottom edge,
+  // not an arbitrary corner that the sheet might cover.
+  const gapTop = sheetBox.y + sheetBox.height;
+  const gapBottom = backdropBox.y + backdropBox.height;
+  await win.mouse.click(backdropBox.x + backdropBox.width / 2, (gapTop + gapBottom) / 2);
+
+  await expect(sheet).toBeHidden();
 });
 
 test('toggling a setting writes through settings:set and persists across reload', async () => {
