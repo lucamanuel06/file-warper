@@ -11,18 +11,51 @@ import { app } from 'electron';
 
 export type SidecarBinary = 'ffmpeg' | 'ffprobe' | '7za';
 
-export function resolveBinary(name: SidecarBinary): string {
-  const exe = process.platform === 'win32' ? `${name}.exe` : name;
-  const binPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'bin', exe)
+/**
+ * electron-builder's `${os}` vocabulary — `mac` / `win` / `linux`, which is NOT
+ * Node's `process.platform`. `extraResources.from` in electron-builder.yml is
+ * `resources/bin/${os}/${arch}`, so the dev path must use the same words or dev
+ * looks in a directory `npm run vendor` never wrote to. Kept in sync with
+ * `osFolder()` in scripts/vendor-binaries.mjs.
+ */
+export function osFolder(platform: NodeJS.Platform = process.platform): string {
+  if (platform === 'darwin') return 'mac';
+  if (platform === 'win32') return 'win';
+  return 'linux';
+}
+
+/** Exported for tests: the path layout, without touching the filesystem. */
+export function sidecarPath(
+  name: SidecarBinary,
+  opts: {
+    packaged: boolean;
+    platform: NodeJS.Platform;
+    arch: string;
+    resourcesPath: string;
+    appPath: string;
+  },
+): string {
+  const exe = opts.platform === 'win32' ? `${name}.exe` : name;
+  return opts.packaged
+    ? path.join(opts.resourcesPath, 'bin', exe)
     : path.join(
-        app.getAppPath(),
+        opts.appPath,
         'resources',
         'bin',
-        process.platform === 'darwin' ? 'mac' : process.platform,
-        process.arch,
+        osFolder(opts.platform),
+        opts.arch,
         exe,
       );
+}
+
+export function resolveBinary(name: SidecarBinary): string {
+  const binPath = sidecarPath(name, {
+    packaged: app.isPackaged,
+    platform: process.platform,
+    arch: process.arch,
+    resourcesPath: process.resourcesPath,
+    appPath: app.getAppPath(),
+  });
 
   if (!fs.existsSync(binPath)) {
     throw new Error(`Missing sidecar binary: ${binPath}. Run \`npm run vendor\`.`);

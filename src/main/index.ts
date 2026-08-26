@@ -18,6 +18,23 @@ import {
 } from './window-chrome';
 import { loadWindowState, saveWindowState } from './window-state';
 
+/**
+ * Redirect ALL persisted state (settings.json, window-state.json,
+ * update-state.json) when WARP_USER_DATA is set.
+ *
+ * This exists because the e2e suite was not hermetic: it asserted the default
+ * value of a setting, so it passed on a fresh CI runner and failed on any
+ * machine where that setting had ever been changed — including by an earlier
+ * test run. Isolating userData per run fixes the whole class, rather than
+ * weakening the assertion.
+ *
+ * Must run before `app.whenReady()`; `app.getPath('userData')` is read during
+ * startup.
+ */
+if (process.env.WARP_USER_DATA) {
+  app.setPath('userData', path.resolve(process.env.WARP_USER_DATA));
+}
+
 /** Automatic check runs after first paint, never blocking it. */
 const AUTOMATIC_UPDATE_CHECK_DELAY_MS = 4_000;
 

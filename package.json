@@ -21,7 +21,10 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "verify": "npm run lint && npm run typecheck && npm test",
-    "verify:app": "bash scripts/verify-app.sh"
+    "verify:app": "node scripts/verify-app.mjs",
+    "dist:mac": "npm run build && npm run vendor && node scripts/dist.mjs --mac",
+    "dist:win": "npm run build && npm run vendor && node scripts/dist.mjs --win",
+    "dist:linux": "npm run build && npm run vendor && node scripts/dist.mjs --linux"
   },
   "dependencies": {
     "@cantoo/pdf-lib": "2.9.1",

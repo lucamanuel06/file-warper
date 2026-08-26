@@ -23,7 +23,9 @@ describe('platformChromeOptions', () => {
   });
 
   it('darwin: is identical regardless of the dark-mode flag (vibrancy follows the system)', () => {
-    expect(platformChromeOptions('darwin', true)).toEqual(platformChromeOptions('darwin', false));
+    expect(platformChromeOptions('darwin', true)).toEqual(
+      platformChromeOptions('darwin', false),
+    );
   });
 
   it('win32: hides the native title bar and requests a real overlay', () => {

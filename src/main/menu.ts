@@ -80,7 +80,11 @@ export function buildMenuTemplate(
             { label: 'Check for Updates…', click: actions.onCheckForUpdates },
             { type: 'separator' },
           ] satisfies MenuItemConstructorOptions[])),
-      { label: 'Clear List', accelerator: 'CmdOrCtrl+Backspace', click: actions.onClearList },
+      {
+        label: 'Clear List',
+        accelerator: 'CmdOrCtrl+Backspace',
+        click: actions.onClearList,
+      },
       { type: 'separator' },
       isMac ? { role: 'close' } : { label: 'Exit', role: 'quit' },
     ],

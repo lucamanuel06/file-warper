@@ -8,15 +8,23 @@ files:
   - out/**
   - package.json
   - '!**/*.map'
-  # Non-darwin @img/sharp prebuilds — ~150 MB of dead weight on a mac-only build.
+  # sharp ships a prebuild per platform as optionalDependencies, and npm installs
+  # only the current platform's — so on a given runner the others are usually
+  # absent anyway. These excludes are belt-and-braces for a tree that picked up
+  # extras (a shared node_modules, a lockfile install with --force), where each
+  # foreign @img package is tens of MB of dead weight. `${platform}` expands to
+  # darwin | win32 | linux, matching the @img naming.
   - '!node_modules/@img/*-linux-*/**'
-  - '!node_modules/@img/*-win32-*/**'
   - '!node_modules/@img/*-linuxmusl-*/**'
+  - '!node_modules/@img/*-win32-*/**'
+  - '!node_modules/@img/*-darwin-*/**'
+  - 'node_modules/@img/*-${platform}-*/**'
 extraResources:
   - from: resources/bin/${os}/${arch}
     to: bin
     filter: ['**/*']
-# Strips com.apple.FinderInfo etc. before signing — codesign hard-fails on it.
+# macOS-only in effect: the hook no-ops on other platforms. It strips
+# com.apple.FinderInfo, which codesign hard-fails on.
 afterPack: scripts/after-pack.mjs
 asar: true
 # asarUnpack is not needed for extraResources — they live outside app.asar
@@ -25,12 +33,13 @@ asarUnpack:
   - '**/*.node'
   - '**/node_modules/sharp/**'
   - '**/node_modules/@img/**'
+
 mac:
   target:
     - target: dmg
-      arch: [arm64]
+      arch: [arm64, x64]
     - target: zip
-      arch: [arm64]
+      arch: [arm64, x64]
   category: public.app-category.utilities
   icon: build/icon.icns
   # Ad-hoc sign — REQUIRED on Apple Silicon. `identity: null` skips signing
@@ -60,3 +69,61 @@ dmg:
       y: 220
       type: link
       path: /Applications
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  icon: build/icon.ico
+  # No Authenticode certificate, so the binary is unsigned and SmartScreen will
+  # warn on first run. That is stated plainly in the release notes rather than
+  # hidden. Do NOT set `verifyUpdateCodeSignature` expectations on an unsigned
+  # build.
+  artifactName: ${productName}-${version}-${arch}-setup.${ext}
+  # Let Windows offer File Warper in "Open with" for any file, mirroring the
+  # macOS CFBundleDocumentTypes entry.
+  fileAssociations:
+    - ext: '*'
+      description: Any File
+      role: Editor
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: File Warper
+portable:
+  artifactName: ${productName}-${version}-${arch}-portable.${ext}
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  icon: build/icon.png
+  category: Utility
+  synopsis: Convert anything into anything, offline
+  description: >-
+    A single-window file converter. Drop files, pick one target format, convert.
+    90 formats and 1186 conversions, all performed locally with bundled engines.
+  desktop:
+    entry:
+      MimeType: application/octet-stream
+appImage:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+deb:
+  # ffmpeg/ffprobe/7za are bundled, so the only real requirements are the
+  # shared libraries Electron itself links against.
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libsecret-1-0

@@ -1,10 +1,18 @@
 /**
  * Runs `next build` when `out/index.html` is missing or stale, so
  * `npm run test:e2e` never silently tests a week-old export.
+ *
+ * Also isolates the app's persisted state for the whole run. Every spec
+ * launches Electron with `{ ...process.env }`, so setting WARP_USER_DATA here
+ * reaches all of them, and `src/main/index.ts` redirects `userData` to it.
+ * Without this the suite is not hermetic: a test that asserts a setting's
+ * DEFAULT passes on a fresh CI runner and fails on any machine where that
+ * setting was ever changed — including by an earlier run of the suite itself.
  */
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
@@ -31,6 +39,10 @@ function isStale(): boolean {
 }
 
 export default function globalSetup(): void {
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'warp-e2e-userdata-'));
+  process.env.WARP_USER_DATA = userData;
+  console.log(`[e2e/harness] isolated userData at ${userData}`);
+
   if (!isStale()) return;
   console.log('[e2e/harness] out/index.html missing or stale — running `next build`…');
   execFileSync('npx', ['next', 'build'], { cwd: PROJECT_ROOT, stdio: 'inherit' });

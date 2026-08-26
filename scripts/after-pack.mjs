@@ -22,7 +22,12 @@ const run = promisify(execFile);
  * `afterPack` runs after the bundle is assembled and before signing, which is
  * the only correct moment for this.
  */
-export default async function afterPack({ appOutDir }) {
+export default async function afterPack({ appOutDir, electronPlatformName }) {
+  // `xattr` is macOS-only; running it on a Windows or Linux runner fails the
+  // build for no reason. FinderInfo only exists on macOS anyway.
+  if (electronPlatformName !== 'darwin' && process.platform !== 'darwin') {
+    return;
+  }
   await run('xattr', ['-rd', 'com.apple.FinderInfo', appOutDir]).catch(() => {
     // -rd exits non-zero when no file carries the attribute. That is success.
   });
