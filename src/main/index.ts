@@ -10,6 +10,12 @@ import { dispatchUpdateStatus, installMenu } from './menu';
 import { APP_ORIGIN, registerScheme, serveExport } from './protocol';
 import * as settings from './settings';
 import { checkForUpdates } from './updates';
+import {
+  buildWindowOptions,
+  shouldQuitOnWindowAllClosed,
+  surfaceColor,
+  titleBarOverlayOptions,
+} from './window-chrome';
 import { loadWindowState, saveWindowState } from './window-state';
 
 /** Automatic check runs after first paint, never blocking it. */
@@ -45,34 +51,15 @@ function dispatchOpenFiles(win: BrowserWindow, paths: string[]): void {
 
 function createWindow(): BrowserWindow {
   const state = loadWindowState();
-  const useVibrancy = true;
 
-  const win = new BrowserWindow({
-    x: state.x,
-    y: state.y,
-    width: state.width,
-    height: state.height,
-    minWidth: 460,
-    minHeight: 520,
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 18, y: 18 },
-    ...(useVibrancy
-      ? {
-          vibrancy: 'under-window' as const,
-          visualEffectState: 'followWindow' as const,
-          backgroundColor: '#00000000',
-        }
-      : { backgroundColor: '#f6f6f7' }),
-    roundedCorners: true,
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, '../preload/index.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      spellcheck: false,
-    },
-  });
+  const win = new BrowserWindow(
+    buildWindowOptions({
+      platform: process.platform,
+      isDark: nativeTheme.shouldUseDarkColors,
+      bounds: state,
+      preloadPath: path.join(__dirname, '../preload/index.js'),
+    }),
+  );
 
   win.once('ready-to-show', () => {
     win.show();
@@ -96,7 +83,19 @@ function createWindow(): BrowserWindow {
     });
   });
 
-  if (process.platform === 'darwin') {
+  // Windows draws no vibrancy: the titlebar overlay and window background
+  // must be repainted by hand whenever the OS theme flips.
+  if (process.platform === 'win32') {
+    const applyTheme = () => {
+      if (win.isDestroyed()) return;
+      win.setTitleBarOverlay(titleBarOverlayOptions(nativeTheme.shouldUseDarkColors));
+      win.setBackgroundColor(surfaceColor(nativeTheme.shouldUseDarkColors));
+    };
+    nativeTheme.on('updated', applyTheme);
+    win.on('closed', () => nativeTheme.off('updated', applyTheme));
+  }
+
+  if (process.platform === 'darwin' || process.platform === 'win32') {
     try {
       const accent = systemPreferences.getAccentColor();
       win.webContents.on('did-finish-load', () => {
@@ -105,9 +104,21 @@ function createWindow(): BrowserWindow {
           .catch(() => {});
       });
     } catch {
-      // Accent colour is a cosmetic touch — never fatal if unavailable.
+      // Accent colour is a cosmetic touch — never fatal if unavailable
+      // (expected on Linux, where the API doesn't exist).
     }
   }
+
+  // Exposes the platform to CSS (`html[data-platform]`) without touching the
+  // frozen `src/shared/ipc.ts` contract — same CustomEvent-via-executeJavaScript
+  // mechanism `menu.ts` uses for menu -> renderer signalling.
+  win.webContents.on('dom-ready', () => {
+    win.webContents
+      .executeJavaScript(
+        `document.documentElement.setAttribute('data-platform', ${JSON.stringify(process.platform)});`,
+      )
+      .catch(() => {});
+  });
 
   const shouldUseDevServer = DEV_URL && !IS_E2E;
   if (shouldUseDevServer) {
@@ -168,9 +179,7 @@ async function main(): Promise<void> {
 }
 
 app.on('window-all-closed', () => {
-  // macOS convention: the app stays alive (in the Dock) after the last
-  // window closes.
-  if (process.platform !== 'darwin') app.quit();
+  if (shouldQuitOnWindowAllClosed(process.platform)) app.quit();
 });
 
 void main();

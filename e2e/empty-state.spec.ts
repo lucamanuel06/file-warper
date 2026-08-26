@@ -43,3 +43,19 @@ test('renders the empty state with the footer and options row hidden', async () 
   await expect(win.getByTestId('footer')).toBeHidden();
   await expect(win.getByTestId('options-disclosure')).toBeHidden();
 });
+
+test('exposes the host platform on <html> and keeps macOS chrome pixel-identical', async () => {
+  // This suite only runs on macOS here — confirms the cross-platform chrome
+  // work (Windows titleBarOverlay, Linux frame:true) left darwin untouched.
+  expect(await app.evaluate(() => process.platform)).toBe('darwin');
+
+  // Set async, off the `dom-ready` event — wait rather than race it.
+  await win.waitForFunction(() => document.documentElement.hasAttribute('data-platform'));
+  const platform = await win.evaluate(() =>
+    document.documentElement.getAttribute('data-platform'),
+  );
+  expect(platform).toBe('darwin');
+
+  await expect(win.getByTestId('settings-button')).toBeVisible();
+  await expect(win.getByTestId('settings-button')).toBeEnabled();
+});

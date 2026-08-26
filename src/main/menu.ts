@@ -46,27 +46,56 @@ async function handleCheckForUpdates(win: BrowserWindow): Promise<void> {
   dispatchUpdateStatus(win, status);
 }
 
-export function buildMenu(getWindow: () => BrowserWindow | null): Menu {
-  const withWindow = (fn: (win: BrowserWindow) => void) => {
-    const win = getWindow();
-    if (win) fn(win);
+export interface MenuActions {
+  onOpen: () => void;
+  onSettings: () => void;
+  onCheckForUpdates: () => void;
+  onClearList: () => void;
+  onReveal: () => void;
+}
+
+/**
+ * Pure — no `Menu.buildFromTemplate`, no window lookups — so the per-platform
+ * shape (which menu holds Quit, which accelerators exist, macOS-only roles)
+ * is unit-testable without booting Electron.
+ */
+export function buildMenuTemplate(
+  platform: NodeJS.Platform,
+  appName: string,
+  actions: MenuActions,
+): MenuItemConstructorOptions[] {
+  const isMac = platform === 'darwin';
+
+  const fileMenu: MenuItemConstructorOptions = {
+    label: 'File',
+    submenu: [
+      { label: 'Open…', accelerator: 'CmdOrCtrl+O', click: actions.onOpen },
+      { type: 'separator' },
+      // On macOS these live in the app menu. Elsewhere there is no app menu,
+      // so File is the first menu and picks them up.
+      ...(isMac
+        ? []
+        : ([
+            { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: actions.onSettings },
+            { label: 'Check for Updates…', click: actions.onCheckForUpdates },
+            { type: 'separator' },
+          ] satisfies MenuItemConstructorOptions[])),
+      { label: 'Clear List', accelerator: 'CmdOrCtrl+Backspace', click: actions.onClearList },
+      { type: 'separator' },
+      isMac ? { role: 'close' } : { label: 'Exit', role: 'quit' },
+    ],
   };
 
-  const template: MenuItemConstructorOptions[] = [
-    {
-      label: app.name,
+  const template: MenuItemConstructorOptions[] = [];
+
+  if (isMac) {
+    template.push({
+      label: appName,
       submenu: [
         { role: 'about' },
         { type: 'separator' },
-        {
-          label: 'Settings…',
-          accelerator: 'Cmd+,',
-          click: () => withWindow((win) => dispatch(win, 'warp:menu-settings')),
-        },
-        {
-          label: 'Check for Updates…',
-          click: () => withWindow((win) => void handleCheckForUpdates(win)),
-        },
+        { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: actions.onSettings },
+        { label: 'Check for Updates…', click: actions.onCheckForUpdates },
         { type: 'separator' },
         { role: 'hide' },
         { role: 'hideOthers' },
@@ -74,58 +103,69 @@ export function buildMenu(getWindow: () => BrowserWindow | null): Menu {
         { type: 'separator' },
         { role: 'quit' },
       ],
-    },
-    {
-      label: 'File',
-      submenu: [
-        {
-          label: 'Open…',
-          accelerator: 'CmdOrCtrl+O',
-          click: () => withWindow((win) => void handleOpen(win)),
+    });
+  }
+
+  template.push(fileMenu);
+
+  template.push({
+    label: 'Edit',
+    submenu: [
+      { role: 'undo' },
+      { role: 'redo' },
+      { type: 'separator' },
+      { role: 'cut' },
+      { role: 'copy' },
+      { role: 'paste' },
+      { role: 'selectAll' },
+    ],
+  });
+
+  template.push({
+    label: 'View',
+    submenu: [
+      {
+        label: 'Reveal in Finder',
+        accelerator: 'CmdOrCtrl+R',
+        click: actions.onReveal,
+      },
+    ],
+  });
+
+  template.push({
+    label: 'Window',
+    // 'zoom' and 'front' are macOS window-cycling idioms with no equivalent
+    // elsewhere.
+    submenu: isMac
+      ? [{ role: 'minimize' }, { role: 'zoom' }, { type: 'separator' }, { role: 'front' }]
+      : [{ role: 'minimize' }, { role: 'close' }],
+  });
+
+  template.push(
+    isMac
+      ? { label: 'Help', role: 'help', submenu: [] }
+      : {
+          label: 'Help',
+          submenu: [{ label: `About ${appName}`, click: () => app.showAboutPanel() }],
         },
-        { type: 'separator' },
-        {
-          label: 'Clear List',
-          accelerator: 'CmdOrCtrl+Backspace',
-          click: () => withWindow((win) => dispatch(win, 'warp:menu-clear')),
-        },
-        { type: 'separator' },
-        { role: 'close' },
-      ],
-    },
-    {
-      label: 'Edit',
-      submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
-        { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'selectAll' },
-      ],
-    },
-    {
-      label: 'View',
-      submenu: [
-        {
-          label: 'Reveal in Finder',
-          accelerator: 'CmdOrCtrl+R',
-          click: () => withWindow((win) => dispatch(win, 'warp:menu-reveal')),
-        },
-      ],
-    },
-    {
-      label: 'Window',
-      submenu: [
-        { role: 'minimize' },
-        { role: 'zoom' },
-        { type: 'separator' },
-        { role: 'front' },
-      ],
-    },
-    { label: 'Help', role: 'help', submenu: [] },
-  ];
+  );
+
+  return template;
+}
+
+export function buildMenu(getWindow: () => BrowserWindow | null): Menu {
+  const withWindow = (fn: (win: BrowserWindow) => void) => {
+    const win = getWindow();
+    if (win) fn(win);
+  };
+
+  const template = buildMenuTemplate(process.platform, app.name, {
+    onOpen: () => withWindow((win) => void handleOpen(win)),
+    onSettings: () => withWindow((win) => dispatch(win, 'warp:menu-settings')),
+    onCheckForUpdates: () => withWindow((win) => void handleCheckForUpdates(win)),
+    onClearList: () => withWindow((win) => dispatch(win, 'warp:menu-clear')),
+    onReveal: () => withWindow((win) => dispatch(win, 'warp:menu-reveal')),
+  });
 
   return Menu.buildFromTemplate(template);
 }

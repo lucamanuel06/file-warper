@@ -32,3 +32,18 @@
 .settingsButton:hover {
   color: var(--text-secondary);
 }
+
+/* Windows: `titleBarOverlay` draws real, functional window controls at the
+   right edge of this strip (~138px at the default control width) — keep the
+   gear clear of them instead of sitting underneath. */
+html[data-platform='win32'] .settingsButton {
+  right: calc(138px + var(--space-3));
+}
+
+/* Linux: the window is framed (`frame: true`) and the desktop environment
+   draws its own title bar with the app title and window controls. A second
+   title here would read as a bug, not a feature — keep the strip only as a
+   home for the gear, deliberately empty of text. */
+html[data-platform='linux'] .title {
+  display: none;
+}
