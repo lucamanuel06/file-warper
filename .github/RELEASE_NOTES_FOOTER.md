@@ -37,11 +37,17 @@ cd file-warper && npm ci && npm run dist
 
 ### What's in the box
 
-Everything runs offline on your machine. No account, no upload, no telemetry —
-the app makes no network requests at all. It bundles its own `ffmpeg`, `ffprobe`
-and `7za`, which is why the download is around 220 MB.
+Conversions run entirely on your machine. No account, no upload, no telemetry —
+your files never leave the Mac. It bundles its own `ffmpeg`, `ffprobe` and
+`7za`, which is why the download is around 220 MB.
 
-Every release is built by GitHub Actions from the tagged commit, and is only
-published after the packaged app has passed lint, typecheck, the full test
-suite, and an end-to-end test that converts a real file using the bundled
-binaries.
+The one exception: if *Check for updates automatically* is on (it is by
+default), the app asks GitHub once a day whether a newer release exists. That
+request carries nothing about you or your files, and the setting turns it off
+completely.
+
+Every release is cut from a tagged commit and only goes out after the packaged
+app has passed lint, typecheck, the full test suite, and an end-to-end test
+that converts a real file using the bundled binaries. The GitHub Actions
+workflow does this automatically; when a macOS runner is unavailable the same
+gates are run locally before publishing.

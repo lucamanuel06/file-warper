@@ -6,7 +6,8 @@
 Convert anything into anything. Offline, on your Mac.
 
 A single-window macOS app: drop files, pick one target format, hit Convert.
-**90 formats, 1186 working conversions**, no cloud, no network, ever.
+**90 formats, 1186 working conversions.** No account, no upload, no telemetry —
+your files never leave your machine.
 
 <!-- screenshot goes here -->
 
@@ -67,13 +68,24 @@ open ~/Library/Caches/file-warper/release/mac-arm64/File\ Warper.app
 > which `codesign` refuses to sign, re-adding it within a second of removal.
 > Set `WARP_RELEASE_DIR` to build somewhere else.
 
+## Privacy
+
+Conversions are entirely local: every engine is bundled, and no file, filename
+or usage data is ever transmitted.
+
+The app makes exactly **one** network request, and only if you leave it on: a
+daily check against the public GitHub releases endpoint to see whether a newer
+version exists. It sends nothing but the plain HTTP GET. Turn off *Check for
+updates automatically* in Settings and File Warper never touches the network
+again.
+
 ## Develop
 
 ```bash
 npm run dev          # Next dev server + esbuild watch + Electron
 npm run verify       # lint + typecheck + unit tests
-npm test             # 587 unit + integration tests
-npm run test:e2e     # 10 Playwright tests, incl. the packaged bundle
+npm test             # 614 unit + integration tests
+npm run test:e2e     # 15 Playwright tests, incl. the packaged bundle
 npm run verify:app   # codesign / Gatekeeper / plist / bundled-ffmpeg checks
 ```
 

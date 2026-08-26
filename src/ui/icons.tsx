@@ -131,13 +131,21 @@ export function GearIcon({ size = 15, className }: IconProps) {
       aria-hidden="true"
       className={className}
     >
-      <circle cx="8" cy="8" r="2.25" stroke="currentColor" strokeWidth="1.3" />
+      {/*
+        A gear is a thick ring whose teeth TOUCH it. The previous version drew a
+        thin circle with eight detached spokes, which is the universal shape for
+        brightness — misleading in an app whose first setting is the theme.
+        The teeth are deliberately chunky: at 15px in `--text-tertiary` grey,
+        anything finer anti-aliases away and the icon collapses back into a
+        plain ring. Verified by rendering at actual size, not by eyeballing the
+        SVG. Ring stroke 2.6 at r=4.3 spans 3.0–5.6, so the centre stays hollow.
+      */}
       <path
-        d="M8 1.5v1.6M8 12.9v1.6M14.5 8h-1.6M3.1 8H1.5M12.5 3.5l-1.13 1.13M4.63 11.37 3.5 12.5M12.5 12.5l-1.13-1.13M4.63 4.63 3.5 3.5"
+        d="M11.90 8.00L15.40 8.00M10.76 10.76L13.23 13.23M8.00 11.90L8.00 15.40M5.24 10.76L2.77 13.23M4.10 8.00L0.60 8.00M5.24 5.24L2.77 2.77M8.00 4.10L8.00 0.60M10.76 5.24L13.23 2.77"
         stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinecap="round"
+        strokeWidth="3.2"
       />
+      <circle cx="8" cy="8" r="4.3" stroke="currentColor" strokeWidth="2.6" />
     </svg>
   );
 }
