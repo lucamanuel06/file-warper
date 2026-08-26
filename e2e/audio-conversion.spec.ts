@@ -10,7 +10,7 @@
  * libraries (and catching any argv that is not passed as an array).
  */
 import { execFile } from 'node:child_process';
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { _electron as electron, expect, test } from '@playwright/test';
@@ -67,9 +67,11 @@ test('converts a real WAV to MP3 through the app, on a path with spaces', async 
   const isFrame = bytes[0] === 0xff && ((bytes[1] ?? 0) & 0xe0) === 0xe0;
   expect(isId3 || isFrame, 'output is not an MP3').toBe(true);
 
-  // No staging file may survive a successful conversion.
-  const { stdout } = await run('/bin/ls', ['-a', dir]);
-  expect(stdout).not.toContain('.filewarper-');
+  // No staging file may survive a successful conversion. Read the directory
+  // with fs rather than shelling out — `/bin/ls` does not exist on Windows,
+  // which failed this spec on windows-latest while passing everywhere else.
+  const leftovers = (await readdir(dir)).filter((f) => f.startsWith('.filewarper-'));
+  expect(leftovers, `staging files left behind: ${leftovers.join(', ')}`).toEqual([]);
 
   await app.close();
 });
