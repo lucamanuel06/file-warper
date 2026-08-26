@@ -32,6 +32,7 @@ mac:
     - target: zip
       arch: [arm64]
   category: public.app-category.utilities
+  icon: build/icon.icns
   # Ad-hoc sign — REQUIRED on Apple Silicon. `identity: null` skips signing
   # entirely, which leaves the arm64 Mach-O without even an ad-hoc signature;
   # macOS reports the result as "damaged".
@@ -47,6 +48,10 @@ mac:
         LSItemContentTypes:
           - public.item
 dmg:
+  background: build/dmg-background.png
+  window:
+    width: 540
+    height: 380
   contents:
     - x: 130
       y: 220
