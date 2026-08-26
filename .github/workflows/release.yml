@@ -1,0 +1,113 @@
+name: Release
+
+# Triggered by a version tag. The intended flow is:
+#
+#     npm version patch    # bumps package.json AND creates the v… tag
+#     git push --follow-tags
+#
+# `npm version` keeps package.json and the tag in lockstep, which the guard
+# step below enforces — a mismatch would ship a DMG whose filename lies about
+# its version.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write # required to create the release and upload the DMG
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Tag must match package.json version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag v$TAG does not match package.json version $PKG."
+            echo "Use \`npm version <patch|minor|major>\` so both move together."
+            exit 1
+          fi
+          echo "version=$PKG" >> "$GITHUB_OUTPUT"
+
+      - name: Lint, typecheck, unit tests
+        run: npm run verify
+
+      - name: Build and package
+        env:
+          # Keep artifacts in the workspace. Locally this defaults to
+          # ~/Library/Caches because ~/Documents is iCloud-synced and the file
+          # provider re-stamps com.apple.FinderInfo, which codesign rejects.
+          # CI has no iCloud, so the workspace is fine.
+          WARP_RELEASE_DIR: ${{ github.workspace }}/release
+        # `--publish never`: electron-builder would otherwise try to publish by
+        # itself on a tagged CI build. We publish in a later step, so the
+        # release only appears once the packaged app has actually been tested.
+        run: npm run dist -- --publish never
+
+      - name: Verify the packaged bundle
+        run: bash scripts/verify-app.sh
+        env:
+          WARP_PACKAGED_APP: ${{ github.workspace }}/release/mac-arm64/File Warper.app
+
+      - name: End-to-end test against the packaged app
+        # Gate the release on the REAL artifact converting a real file. This is
+        # what would have caught the ffmpeg muxer bug that once shipped.
+        env:
+          WARP_PACKAGED_APP: ${{ github.workspace }}/release/mac-arm64/File Warper.app
+        run: npx playwright test e2e/packaged.spec.ts
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          TAG="${GITHUB_REF_NAME}"
+          case "$TAG" in v*) ;; *) TAG="v$VERSION" ;; esac
+
+          # Re-tag on workflow_dispatch so a manual run still produces a release.
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+
+          gh release create "$TAG" \
+            release/*.dmg release/*.zip \
+            --title "File Warper $VERSION" \
+            --generate-notes
+
+          # --generate-notes and --notes-file are mutually exclusive, so append
+          # the install instructions to the generated body afterwards.
+          BODY="$(gh release view "$TAG" --json body -q .body)"
+          FOOTER="$(cat .github/RELEASE_NOTES_FOOTER.md)"
+          printf '%s\n\n---\n\n%s\n' "$BODY" "$FOOTER" > /tmp/release-notes.md
+          gh release edit "$TAG" --notes-file /tmp/release-notes.md
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-failure
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

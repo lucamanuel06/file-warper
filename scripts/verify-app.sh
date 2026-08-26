@@ -5,7 +5,12 @@
 # exec'd; a dropped executable bit silently produces "cannot open").
 set -euo pipefail
 
-APP_PATH="${1:-release/mac-arm64/File Warper.app}"
+# Resolution order: explicit argument, then WARP_PACKAGED_APP, then the same
+# release directory `npm run dist` used (see scripts/dist.mjs — locally that is
+# outside the repo, because ~/Documents is iCloud-synced and codesign chokes on
+# the FinderInfo attribute the file provider adds).
+DEFAULT_RELEASE_DIR="${WARP_RELEASE_DIR:-$HOME/Library/Caches/file-warper/release}"
+APP_PATH="${1:-${WARP_PACKAGED_APP:-$DEFAULT_RELEASE_DIR/mac-arm64/File Warper.app}}"
 
 fail() {
   echo "FAIL: $1" >&2

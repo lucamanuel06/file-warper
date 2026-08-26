@@ -41,11 +41,16 @@ child.on('exit', (code) => {
   // Copy the distributables back for convenience. The .app itself stays put:
   // moving it into iCloud would re-stamp FinderInfo, and while that does not
   // stop it launching, it would break any later re-sign.
+  //
+  // On CI, WARP_RELEASE_DIR is already ./release, so there is nothing to copy —
+  // and cpSync onto itself throws.
   const localRelease = path.join(root, 'release');
-  mkdirSync(localRelease, { recursive: true });
-  for (const f of readdirSync(outDir)) {
-    if (f.endsWith('.dmg') || f.endsWith('.zip')) {
-      cpSync(path.join(outDir, f), path.join(localRelease, f));
+  if (path.resolve(outDir) !== path.resolve(localRelease)) {
+    mkdirSync(localRelease, { recursive: true });
+    for (const f of readdirSync(outDir)) {
+      if (f.endsWith('.dmg') || f.endsWith('.zip')) {
+        cpSync(path.join(outDir, f), path.join(localRelease, f));
+      }
     }
   }
 
