@@ -19,6 +19,7 @@ import type {
   SerializedError,
   TargetSet,
 } from '../core/types';
+import type { AppSettings, UpdateStatus } from './settings';
 
 // ---------------------------------------------------------------------------
 // Renderer -> main (request/response)
@@ -54,6 +55,19 @@ export interface IpcInvokeMap {
 
   'shell:reveal': (path: string) => Promise<void>;
   'app:info': () => Promise<{ version: string; isPackaged: boolean }>;
+
+  /** Persisted user settings — see src/shared/settings.ts. */
+  'settings:get': () => Promise<AppSettings>;
+  /** Merges a patch, persists, and returns the full resulting settings. */
+  'settings:set': (patch: Partial<AppSettings>) => Promise<AppSettings>;
+
+  /**
+   * Asks GitHub for the latest release. `manual: true` bypasses both the 24h
+   * throttle and the `checkForUpdates` setting (the user pressed "Check now").
+   */
+  'update:check': (opts?: { manual?: boolean }) => Promise<UpdateStatus>;
+  /** Opens a release URL in the default browser. */
+  'update:open': (url: string) => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -108,6 +122,10 @@ export const INVOKE_CHANNELS = [
   'temp:spill',
   'shell:reveal',
   'app:info',
+  'settings:get',
+  'settings:set',
+  'update:check',
+  'update:open',
 ] as const satisfies readonly (keyof IpcInvokeMap)[];
 
 export const EVENT_CHANNELS = [
