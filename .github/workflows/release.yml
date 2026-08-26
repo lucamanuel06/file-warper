@@ -6,23 +6,77 @@ name: Release
 #     git push --follow-tags
 #
 # `npm version` keeps package.json and the tag in lockstep, which the guard
-# step below enforces — a mismatch would ship a DMG whose filename lies about
-# its version.
+# job below enforces — a mismatch would ship installers whose filenames lie
+# about their version.
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
 
-permissions:
-  contents: write # required to create the release and upload the DMG
-
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
-  release:
-    runs-on: macos-latest
+  guard:
+    # Tiny pre-job so the tag/version check runs once instead of once per
+    # platform, and so a bad tag fails fast before burning three platforms'
+    # worth of build minutes.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Tag must match package.json version
+        id: check
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF_NAME#v}"
+            if [ "$TAG" != "$PKG" ]; then
+              echo "::error::Tag v$TAG does not match package.json version $PKG."
+              echo "Use \`npm version <patch|minor|major>\` so both move together."
+              exit 1
+            fi
+          fi
+          echo "version=$PKG" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: guard
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            artifact_name: macos
+            glob: |
+              release/*.dmg
+              release/*.zip
+          - os: windows-latest
+            platform: win
+            artifact_name: windows
+            glob: |
+              release/*.exe
+          - os: ubuntu-latest
+            platform: linux
+            artifact_name: linux
+            glob: |
+              release/*.AppImage
+              release/*.deb
+
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 45
 
     steps:
@@ -36,51 +90,93 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Tag must match package.json version
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          TAG="${GITHUB_REF_NAME#v}"
-          PKG="$(node -p "require('./package.json').version")"
-          if [ "$TAG" != "$PKG" ]; then
-            echo "::error::Tag v$TAG does not match package.json version $PKG."
-            echo "Use \`npm version <patch|minor|major>\` so both move together."
-            exit 1
-          fi
-          echo "version=$PKG" >> "$GITHUB_OUTPUT"
-
       - name: Lint, typecheck, unit tests
         run: npm run verify
 
       - name: Build and package
         env:
-          # Keep artifacts in the workspace. Locally this defaults to
-          # ~/Library/Caches because ~/Documents is iCloud-synced and the file
-          # provider re-stamps com.apple.FinderInfo, which codesign rejects.
-          # CI has no iCloud, so the workspace is fine.
+          # Keep artifacts in the workspace. Locally `dist` defaults to a
+          # directory outside the repo (see scripts/dist.mjs) because on macOS
+          # ~/Documents is iCloud-synced and codesign rejects the FinderInfo
+          # attribute the file provider re-stamps. CI has no iCloud, so the
+          # workspace is fine on every OS.
           WARP_RELEASE_DIR: ${{ github.workspace }}/release
         # `--publish never`: electron-builder would otherwise try to publish by
-        # itself on a tagged CI build. We publish in a later step, so the
-        # release only appears once the packaged app has actually been tested.
-        run: npm run dist -- --publish never
+        # itself on a tagged CI build. We publish in a later job, once every
+        # platform's packaged app has actually been tested.
+        run: npm run dist:${{ matrix.platform }} -- --publish never
 
       - name: Verify the packaged bundle
-        run: bash scripts/verify-app.sh
         env:
-          WARP_PACKAGED_APP: ${{ github.workspace }}/release/mac-arm64/File Warper.app
+          WARP_RELEASE_DIR: ${{ github.workspace }}/release
+        run: npm run verify:app
+
+      - name: Install Xvfb
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
 
       - name: End-to-end test against the packaged app
         # Gate the release on the REAL artifact converting a real file. This is
         # what would have caught the ffmpeg muxer bug that once shipped.
+        #
+        # e2e/packaged.spec.ts currently resolves the bundle via
+        # WARP_PACKAGED_APP or a macOS-only default path, and SKIPS itself
+        # (rather than failing) when that path doesn't exist. We only know the
+        # existing macOS convention (release/mac-arm64/File Warper.app) here,
+        # so this step exercises the real bundle on macOS today and
+        # self-skips on Windows/Linux until the spec is made cross-platform —
+        # see the final report for who owns that follow-up.
         env:
-          WARP_PACKAGED_APP: ${{ github.workspace }}/release/mac-arm64/File Warper.app
-        run: npx playwright test e2e/packaged.spec.ts
+          WARP_PACKAGED_APP: ${{ runner.os == 'macOS' && format('{0}/release/mac-arm64/File Warper.app', github.workspace) || '' }}
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            xvfb-run -a npx playwright test e2e/packaged.spec.ts
+          else
+            npx playwright test e2e/packaged.spec.ts
+          fi
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.artifact_name }}
+          path: ${{ matrix.glob }}
+          if-no-files-found: error
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-failure-${{ matrix.artifact_name }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  publish:
+    needs: [guard, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # required to create the release and upload assets
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
 
       - name: Publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.guard.outputs.version }}
         run: |
           set -euo pipefail
-          VERSION="$(node -p "require('./package.json').version")"
+          shopt -s nullglob
+
           TAG="${GITHUB_REF_NAME}"
           case "$TAG" in v*) ;; *) TAG="v$VERSION" ;; esac
 
@@ -90,6 +186,12 @@ jobs:
             git push origin "$TAG"
           fi
 
+          ASSETS=(release/*.dmg release/*.zip release/*.exe release/*.AppImage release/*.deb)
+          if [ "${#ASSETS[@]}" -eq 0 ]; then
+            echo "::error::No release assets found after downloading artifacts."
+            exit 1
+          fi
+
           # Idempotent on purpose. `gh release create` hard-fails with
           # "a release with the same tag name already exists", which is exactly
           # what happened when a release was published by hand from a laptop
@@ -97,10 +199,10 @@ jobs:
           # what would happen on any re-run of a partially failed job.
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG exists — uploading assets into it."
-            gh release upload "$TAG" release/*.dmg release/*.zip --clobber
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
           else
             gh release create "$TAG" \
-              release/*.dmg release/*.zip \
+              "${ASSETS[@]}" \
               --title "File Warper $VERSION" \
               --generate-notes
 
@@ -111,13 +213,3 @@ jobs:
             printf '%s\n\n---\n\n%s\n' "$BODY" "$FOOTER" > /tmp/release-notes.md
             gh release edit "$TAG" --notes-file /tmp/release-notes.md
           fi
-
-      - name: Upload failure artifacts
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-failure
-          path: |
-            playwright-report/
-            test-results/
-          retention-days: 7

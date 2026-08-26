@@ -10,13 +10,16 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   verify:
-    # Must be macOS: the app is macOS-only, sharp resolves a darwin-arm64
-    # prebuild, and Electron cannot run headless here — the e2e step needs a
-    # real WindowServer session, which GitHub's macOS runners provide.
-    runs-on: macos-latest
-    timeout-minutes: 30
+    # Lint and typecheck are platform-independent — run them once here instead
+    # of once per OS in the build matrix below.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v5
@@ -35,22 +38,57 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+  build:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Unit and integration tests
         run: npm test
 
       - name: Build renderer and main
         run: npm run build
 
+      - name: Install Xvfb
+        # Electron needs a display to run its e2e tests. macOS runners have a
+        # WindowServer and Windows runners have a desktop session; Ubuntu
+        # runners have neither, so give it a virtual framebuffer instead of
+        # skipping the step (and losing coverage) on Linux.
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
       - name: End-to-end tests
-        # packaged.spec.ts skips itself when no bundle exists, so this covers
-        # the dev-mode specs only. The packaged bundle is tested in release.yml.
-        run: npm run test:e2e
+        # packaged.spec.ts skips itself when no packaged bundle exists, so this
+        # covers the dev-mode specs only. The packaged bundle is tested in
+        # release.yml.
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            xvfb-run -a npm run test:e2e
+          else
+            npm run test:e2e
+          fi
 
       - name: Upload failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.os }}
           path: |
             playwright-report/
             test-results/
