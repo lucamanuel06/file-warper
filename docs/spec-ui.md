@@ -95,6 +95,8 @@ Changing the target **live re-evaluates** which rows are dim. That is the whole 
 
 `<select>` with `appearance: none`, custom chevron, styled to match. Free keyboard navigation, free type-ahead, free VoiceOver, free `<optgroup>`, correct native popover positioning — and it deletes ~150 lines of custom-popover code plus its focus-trap bugs.
 
+**Native color invariant:** the popup is rendered by the OS, not by our CSS, so it only reads two things — `color-scheme` and inherited `color`/`background-color` on `option`/`optgroup`. `color-scheme` must track the *applied* theme (`:root[data-theme]`, see §3's variable block), not the OS preference alone, or Chromium picks the popup's light/dark rendering independently of the in-app toggle. `option`/`optgroup` additionally get explicit `color: var(--text-primary)` and `background-color: var(--bg-elevated)` under `.select` in both `FormatSelect.module.css` and `Controls.module.css` — inheritance into the native popup isn't reliable on Windows.
+
 **Grouping (project decision):**
 ```
 Suggested      <- ~6 entries: the same-category, lossless-first, most-popular targets
@@ -206,7 +208,7 @@ Structure: one `globals.css` (reset + tokens + `html`/`body`) plus a `.module.cs
 
 ```css
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
   /* Type */
   --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text",
@@ -273,6 +275,7 @@ Structure: one `globals.css` (reset + tokens + `html`/`body`) plus a `.module.cs
    (unless the user forced light) and once for an explicit in-app toggle. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg:          rgb(30 30 32 / 0.62);
     --bg-opaque:   #1e1e20;
     --bg-elevated: #2a2a2d;
@@ -295,7 +298,12 @@ Structure: one `globals.css` (reset + tokens + `html`/`body`) plus a `.module.cs
   }
 }
 :root[data-theme="dark"] {
-  /* same block as above, repeated so the manual toggle wins in both directions */
+  color-scheme: dark;
+  /* rest of the block above, repeated so the manual toggle wins in both directions */
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  /* no other overrides — the light tokens are already :root's default */
 }
 
 html, body, #__next { height: 100%; margin: 0; }

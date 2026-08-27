@@ -112,9 +112,19 @@ test('the theme segmented control flips data-theme on <html>', async () => {
   const themeControl = win.getByTestId('theme-control');
   await themeControl.getByText('Dark', { exact: true }).click();
   await expect(win.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect
+    .poll(() =>
+      win.evaluate(() => getComputedStyle(document.documentElement).colorScheme),
+    )
+    .toBe('dark');
 
   await themeControl.getByText('Light', { exact: true }).click();
   await expect(win.locator('html')).toHaveAttribute('data-theme', 'light');
+  await expect
+    .poll(() =>
+      win.evaluate(() => getComputedStyle(document.documentElement).colorScheme),
+    )
+    .toBe('light');
 
   await themeControl.getByText('System', { exact: true }).click();
   await expect(win.locator('html')).not.toHaveAttribute('data-theme');

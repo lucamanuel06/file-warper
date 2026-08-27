@@ -41,6 +41,11 @@
   font-size: var(--text-sm);
   color: var(--text-primary);
 }
+.select option,
+.select optgroup {
+  color: var(--text-primary);
+  background-color: var(--bg-elevated);
+}
 
 .switch {
   margin-left: auto;
