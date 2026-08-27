@@ -18,7 +18,8 @@ resources/
 .venv/
 venv/
 __pycache__/
-build/
+# build/ bewust NIET genegeerd: bevat committed macOS/Windows-iconen en de
+# dmg-achtergrond (zie scripts/make-icon.mjs), geen build-output.
 .env
 .env.local
 .pnpm-store/
