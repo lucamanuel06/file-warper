@@ -52,14 +52,18 @@ function saveMockSettings(next: AppSettings) {
 }
 
 const registry = new Map<string, { name: string; size: number }>();
-const listeners = new Set<(e: WarpEvent[]) => void>();
+// Keyed by channel: with more than one event channel, a single shared set
+// would hand `warp:events` arrays to the `update:progress` subscriber.
+const listeners = new Map<string, Set<(payload: never) => void>>();
 const cancelledJobs = new Set<JobId>();
 const cancelledBatches = new Set<BatchId>();
 let seq = 0;
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const emit = (events: WarpEvent[]) => {
-  for (const l of listeners) l(events);
+  for (const l of listeners.get('warp:events') ?? []) {
+    (l as unknown as (e: WarpEvent[]) => void)(events);
+  }
 };
 const isCancelled = (batchId: BatchId, jobId: JobId) =>
   cancelledBatches.has(batchId) || cancelledJobs.has(jobId);
@@ -238,6 +242,12 @@ async function invokeImpl(channel: string, ...args: unknown[]): Promise<unknown>
     case 'update:open':
       console.info('[mockBridge] open', args[0]);
       return undefined;
+    case 'update:download':
+      console.info('[mockBridge] download', args[0]);
+      return '/tmp/File Warper.dmg';
+    case 'update:cancelDownload':
+    case 'update:revealDownload':
+      return undefined;
     default:
       throw new Error(`[mockBridge] unhandled channel: ${channel}`);
   }
@@ -248,10 +258,14 @@ export function installMockBridge(): void {
   const api: WarpApi = {
     invoke: (<C extends keyof IpcInvokeMap>(channel: C, ...args: unknown[]) =>
       invokeImpl(channel, ...args)) as WarpApi['invoke'],
-    on: (_event, cb) => {
-      const handler = cb as (e: WarpEvent[]) => void;
-      listeners.add(handler);
-      return () => listeners.delete(handler);
+    on: (event, cb) => {
+      const handler = cb as (payload: never) => void;
+      const set = listeners.get(event) ?? new Set();
+      set.add(handler);
+      listeners.set(event, set);
+      return () => {
+        set.delete(handler);
+      };
     },
     pathsForFiles: (files) => files.map((f) => synthPath(f.name, f.size)),
   };

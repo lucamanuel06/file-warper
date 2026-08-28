@@ -1,5 +1,6 @@
 'use client';
 
+import type { UpdateDownloadProgress } from '@shared/ipc';
 import type { AppSettings, UpdateStatus } from '@shared/settings';
 import { DEFAULT_SETTINGS, RELEASES_PAGE_URL } from '@shared/settings';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -13,6 +14,7 @@ export function useSettings() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' });
   const [updateDismissed, setUpdateDismissed] = useState(false);
+  const [download, setDownload] = useState<UpdateDownloadProgress | null>(null);
   const gearRef = useRef<HTMLButtonElement>(null);
   const wasOpenRef = useRef(false);
 
@@ -108,13 +110,64 @@ export function useSettings() {
     void window.warp.invoke('update:open', url);
   }, []);
 
-  const dismissUpdate = useCallback(() => setUpdateDismissed(true), []);
+  // Main owns the progress; this hook only mirrors it. Subscribing here rather
+  // than inside startDownload means a download that is already running when the
+  // component remounts still reports into the UI.
+  useEffect(() => {
+    return window.warp.on('update:progress', setDownload);
+  }, []);
+
+  /**
+   * Downloads the installer in-app when the release has an asset for this
+   * machine, and otherwise opens the release page — that is the honest
+   * fallback when `pickAssetUrl` found nothing it could vouch for.
+   */
+  const startDownload = useCallback(async (status: UpdateStatus) => {
+    if (status.state !== 'available') return;
+    if (!status.downloadUrl) {
+      void window.warp.invoke('update:open', status.url);
+      return;
+    }
+    setDownload({ state: 'downloading', received: 0, total: 0, ratio: -1 });
+    try {
+      await window.warp.invoke('update:download', status.downloadUrl);
+    } catch {
+      // Main already pushed the terminal frame over `update:progress`; the
+      // rejection here is the same failure arriving twice. Only synthesise one
+      // if that event somehow never landed.
+      setDownload((prev) =>
+        prev?.state === 'downloading'
+          ? {
+              state: 'error',
+              received: prev.received,
+              total: prev.total,
+              ratio: 0,
+              message: "The download didn't finish.",
+            }
+          : prev,
+      );
+    }
+  }, []);
+
+  const cancelDownload = useCallback(() => {
+    void window.warp.invoke('update:cancelDownload');
+  }, []);
+
+  const revealDownload = useCallback((filePath: string) => {
+    void window.warp.invoke('update:revealDownload', filePath);
+  }, []);
+
+  const dismissUpdate = useCallback(() => {
+    setUpdateDismissed(true);
+    setDownload(null);
+  }, []);
 
   return {
     settings,
     appVersion,
     sheetOpen,
     updateStatus,
+    download,
     updateBarVisible: updateStatus.state === 'available' && !updateDismissed,
     gearRef,
     openSheet,
@@ -124,6 +177,9 @@ export function useSettings() {
     clearFolder,
     checkNow,
     openLink,
+    startDownload,
+    cancelDownload,
+    revealDownload,
     dismissUpdate,
   };
 }

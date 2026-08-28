@@ -68,6 +68,37 @@ export interface IpcInvokeMap {
   'update:check': (opts?: { manual?: boolean }) => Promise<UpdateStatus>;
   /** Opens a release URL in the default browser. */
   'update:open': (url: string) => Promise<void>;
+
+  /**
+   * Downloads a release asset inside the app instead of handing it to the
+   * browser. Resolves with the absolute path it landed on (under the user's
+   * Downloads folder). Progress arrives on the `update:progress` event; call
+   * `update:cancelDownload` to abort.
+   *
+   * Main re-validates the URL against the project's own releases prefix, so a
+   * renderer cannot turn this into a general-purpose downloader.
+   */
+  'update:download': (url: string) => Promise<string>;
+  /** Aborts the download in flight. No-op when nothing is downloading. */
+  'update:cancelDownload': () => Promise<void>;
+  /** Reveals a finished download in Finder/Explorer/the file manager. */
+  'update:revealDownload': (path: string) => Promise<void>;
+}
+
+/**
+ * Progress for the in-app update download. `total` is 0 and `ratio` is -1 when
+ * the server sends no Content-Length — the UI must render that indeterminately
+ * rather than as 0%.
+ */
+export interface UpdateDownloadProgress {
+  readonly state: 'downloading' | 'done' | 'error' | 'cancelled';
+  readonly received: number;
+  readonly total: number;
+  readonly ratio: number;
+  /** Set when `state` is 'done'. */
+  readonly path?: string;
+  /** Set when `state` is 'error'; already phrased for a human. */
+  readonly message?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -107,6 +138,13 @@ export interface IpcEventMap {
    * `job:state` transitions are never dropped; only `job:progress` is coalesced.
    */
   'warp:events': WarpEvent[];
+
+  /**
+   * NOT an array — unlike `warp:events` there is at most one update download
+   * at a time, so there is nothing to coalesce across. Main throttles the
+   * `downloading` frames itself; the terminal states are never dropped.
+   */
+  'update:progress': UpdateDownloadProgress;
 }
 
 export const INVOKE_CHANNELS = [
@@ -126,10 +164,14 @@ export const INVOKE_CHANNELS = [
   'settings:set',
   'update:check',
   'update:open',
+  'update:download',
+  'update:cancelDownload',
+  'update:revealDownload',
 ] as const satisfies readonly (keyof IpcInvokeMap)[];
 
 export const EVENT_CHANNELS = [
   'warp:events',
+  'update:progress',
 ] as const satisfies readonly (keyof IpcEventMap)[];
 
 // ---------------------------------------------------------------------------

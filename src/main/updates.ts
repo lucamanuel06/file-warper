@@ -81,18 +81,132 @@ interface GithubRelease {
   assets?: unknown;
 }
 
-function pickDmgUrl(release: GithubRelease): string | null {
+/**
+ * Installer extensions this platform can actually run, best first.
+ *
+ * macOS: the .dmg is what a person expects to double-click; the -mac.zip is
+ * the same bundle for scripted installs, so it is only a fallback.
+ * Linux: AppImage before .deb — AppImage runs on any distro, .deb does not.
+ */
+const PLATFORM_EXTENSIONS: Readonly<Record<string, readonly string[]>> = {
+  darwin: ['.dmg', '.zip'],
+  win32: ['.exe', '.msi'],
+  linux: ['.appimage', '.deb', '.rpm'],
+};
+
+/**
+ * Every spelling of an architecture that appears in a release filename.
+ * electron-builder is not consistent about it: the same build produces
+ * `-arm64.dmg`, `-x86_64.AppImage` and `_amd64.deb`.
+ */
+const ARCH_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  arm64: ['arm64', 'aarch64'],
+  x64: ['x64', 'x86_64', 'amd64', 'intel'],
+  ia32: ['ia32', 'i386', 'i686', 'x86'],
+  arm: ['armv7l', 'armhf'],
+};
+
+/** Whole-token match: `mac` hits `-mac.zip` but not `macarena.zip`. */
+function namesToken(name: string, token: string): boolean {
+  return new RegExp(`(^|[^a-z0-9])${token}([^a-z0-9]|$)`, 'i').test(name);
+}
+
+const ALL_ALIASES = Object.entries(ARCH_ALIASES).flatMap(([arch, aliases]) =>
+  aliases.map((alias) => ({ arch, alias })),
+);
+
+/**
+ * Which architectures a filename actually claims.
+ *
+ * The overlap filter is the subtle part: `x86` is a token inside `x86_64`, so
+ * a plain per-alias scan reads every Intel build as 32-bit as well. Only the
+ * most specific alias present is allowed to count.
+ */
+function archesNamed(name: string): Set<string> {
+  const hits = ALL_ALIASES.filter(({ alias }) => namesToken(name, alias));
+  return new Set(
+    hits
+      .filter((h) => !hits.some((o) => o.alias !== h.alias && o.alias.includes(h.alias)))
+      .map((h) => h.arch),
+  );
+}
+
+function namesArch(name: string, arch: string): boolean {
+  return archesNamed(name).has(arch);
+}
+
+/** True when the filename claims an architecture that is NOT ours. */
+function namesForeignArch(name: string, arch: string): boolean {
+  const named = archesNamed(name);
+  return named.size > 0 && !named.has(arch);
+}
+
+interface Candidate {
+  readonly url: string;
+  readonly extRank: number;
+  readonly archRank: number;
+  readonly variantRank: number;
+}
+
+/**
+ * Picks the asset that belongs to the machine we are running on.
+ *
+ * This used to be `pickDmgUrl`, which returned the first `.dmg` in the release
+ * regardless of anything: Windows and Linux users were handed a macOS disk
+ * image, and an Intel Mac got whichever of the two Mac builds GitHub happened
+ * to list first. A release now carries eight assets across three platforms and
+ * two architectures, so guessing is not survivable.
+ *
+ * Returns null rather than a near-miss when nothing matches — the caller falls
+ * back to the release page, where the user can see all the options. Handing
+ * someone a binary their machine cannot execute is worse than one extra click.
+ */
+export function pickAssetUrl(
+  release: GithubRelease,
+  platform: string = process.platform,
+  arch: string = process.arch,
+): string | null {
   if (!Array.isArray(release.assets)) return null;
+  const extensions = PLATFORM_EXTENSIONS[platform];
+  if (!extensions) return null;
+
+  const candidates: Candidate[] = [];
+
   for (const asset of release.assets as GithubAsset[]) {
-    if (
-      typeof asset?.name === 'string' &&
-      asset.name.endsWith('.dmg') &&
-      typeof asset.browser_download_url === 'string'
-    ) {
-      return asset.browser_download_url;
-    }
+    const name = typeof asset?.name === 'string' ? asset.name : '';
+    const url =
+      typeof asset?.browser_download_url === 'string' ? asset.browser_download_url : '';
+    if (!name || !url) continue;
+
+    const lower = name.toLowerCase();
+    const extRank = extensions.findIndex((ext) => lower.endsWith(ext));
+    if (extRank < 0) continue;
+
+    // A .zip is only ours if it says so. electron-builder ships `-mac.zip`;
+    // on Windows or Linux a bare .zip in the release is something else.
+    if (lower.endsWith('.zip') && !namesToken(lower, 'mac')) continue;
+
+    // Never offer a build for another architecture. An arm64 installer simply
+    // will not run on an Intel machine.
+    if (namesForeignArch(lower, arch)) continue;
+
+    candidates.push({
+      url,
+      extRank,
+      // An asset that names our arch beats one that names none. The unnamed
+      // one is still valid — the Intel Mac build is just `File.Warper-x.y.z.dmg`.
+      archRank: namesArch(lower, arch) ? 0 : 1,
+      // Prefer the installer over the portable build: someone updating an app
+      // they already installed wants the thing that replaces it.
+      variantRank: namesToken(lower, 'portable') ? 1 : 0,
+    });
   }
-  return null;
+
+  candidates.sort(
+    (a, b) =>
+      a.extRank - b.extRank || a.archRank - b.archRank || a.variantRank - b.variantRank,
+  );
+  return candidates[0]?.url ?? null;
 }
 
 function friendlyMessage(err: unknown): string {
@@ -164,7 +278,7 @@ export async function checkForUpdates(opts?: {
       current,
       latest,
       url: typeof release.html_url === 'string' ? release.html_url : RELEASES_PAGE_URL,
-      downloadUrl: pickDmgUrl(release),
+      downloadUrl: pickAssetUrl(release),
       notes: typeof release.body === 'string' ? release.body : '',
       publishedAt: typeof release.published_at === 'string' ? release.published_at : '',
       checkedAt: now,

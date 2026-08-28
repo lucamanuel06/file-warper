@@ -30,9 +30,10 @@ export default function Page() {
         {settingsState.updateBarVisible && available && (
           <UpdateBar
             version={available.latest}
-            onDownload={() =>
-              settingsState.openLink(available.downloadUrl ?? available.url)
-            }
+            download={settingsState.download}
+            onDownload={() => void settingsState.startDownload(available)}
+            onCancel={settingsState.cancelDownload}
+            onReveal={settingsState.revealDownload}
             onDismiss={settingsState.dismissUpdate}
           />
         )}

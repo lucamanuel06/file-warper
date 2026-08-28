@@ -18,6 +18,7 @@ import { type BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { sanitizeBasename } from '../runtime/naming';
 import type { Scheduler } from '../runtime/scheduler';
 import * as temp from '../runtime/temp';
+import { cancelDownload, downloadUpdate } from './download';
 import { resolveBinary } from './resolveBinary';
 import * as settings from './settings';
 import { checkForUpdates } from './updates';
@@ -215,6 +216,25 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       throw new Error('Refusing to open a non-GitHub URL.');
     }
     await shell.openExternal(url);
+  });
+
+  ipcMain.handle('update:download', async (_e, url: string) =>
+    downloadUpdate(url, {
+      onProgress: (p) => {
+        // The window can be gone mid-download (user closed it); the download
+        // itself is harmless to finish, there is just nobody to tell.
+        const win = deps.getWindow();
+        if (win && !win.isDestroyed()) win.webContents.send('update:progress', p);
+      },
+    }),
+  );
+
+  ipcMain.handle('update:cancelDownload', async () => {
+    cancelDownload();
+  });
+
+  ipcMain.handle('update:revealDownload', async (_e, p: string) => {
+    shell.showItemInFolder(p);
   });
 }
 
