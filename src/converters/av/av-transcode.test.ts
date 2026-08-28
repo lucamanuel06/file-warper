@@ -262,14 +262,96 @@ describe('buildFfmpegArgs (pure, snapshot)', () => {
     expect(result.args).toEqual(expect.arrayContaining(['-ac', '1']));
   });
 
-  it('clamps sample rate to 48kHz when the source exceeds it', () => {
+  it('never clamps the sample rate for a lossless target', () => {
+    for (const format of ['flac', 'wav', 'aiff', 'au', 'caf', 'mka'] as const) {
+      const result = buildFfmpegArgs(
+        { path: '/in.wav', format: 'wav' },
+        { path: `/out.${format}`, format },
+        {},
+        HIGH_RATE_AUDIO_PROBE,
+      );
+      expect(result.args).not.toContain('-ar');
+    }
+  });
+
+  it('clamps sample rate to 48kHz for a lossy target above it', () => {
     const result = buildFfmpegArgs(
       { path: '/in.wav', format: 'wav' },
-      { path: '/out.flac', format: 'flac' },
+      { path: '/out.mp3', format: 'mp3' },
       {},
       HIGH_RATE_AUDIO_PROBE,
     );
     expect(result.args).toEqual(expect.arrayContaining(['-ar', '48000']));
+  });
+
+  it('keeps 24-bit depth into wav/aiff instead of truncating to 16', () => {
+    const probe24 = fakeProbe({
+      hasAudio: true,
+      audioCodec: 'pcm_s24le',
+      streams: [
+        {
+          index: 0,
+          codec_type: 'audio',
+          codec_name: 'pcm_s24le',
+          sample_rate: '96000',
+          sample_fmt: 's32',
+          bits_per_raw_sample: '24',
+        },
+      ],
+    });
+    const wav = buildFfmpegArgs(
+      { path: '/in.flac', format: 'flac' },
+      { path: '/out.wav', format: 'wav' },
+      {},
+      probe24,
+    );
+    expect(wav.args).toEqual(expect.arrayContaining(['-c:a', 'pcm_s24le']));
+    const aiff = buildFfmpegArgs(
+      { path: '/in.flac', format: 'flac' },
+      { path: '/out.aiff', format: 'aiff' },
+      {},
+      probe24,
+    );
+    expect(aiff.args).toEqual(expect.arrayContaining(['-c:a', 'pcm_s24be']));
+    const flac = buildFfmpegArgs(
+      { path: '/in.wav', format: 'wav' },
+      { path: '/out.flac', format: 'flac' },
+      {},
+      probe24,
+    );
+    expect(flac.args).toEqual(expect.arrayContaining(['-sample_fmt', 's32']));
+  });
+
+  it('stays 16-bit when the source is 16-bit', () => {
+    const wav = buildFfmpegArgs(
+      { path: '/in.flac', format: 'flac' },
+      { path: '/out.wav', format: 'wav' },
+      {},
+      fakeProbe({
+        hasAudio: true,
+        audioCodec: 'flac',
+        streams: [
+          {
+            index: 0,
+            codec_type: 'audio',
+            codec_name: 'flac',
+            sample_rate: '44100',
+            sample_fmt: 's16',
+          },
+        ],
+      }),
+    );
+    expect(wav.args).toEqual(expect.arrayContaining(['-c:a', 'pcm_s16le']));
+  });
+
+  it('ac3 uses the ac3 bitrate ladder, not the aac one', () => {
+    const result = buildFfmpegArgs(
+      { path: '/in.wav', format: 'wav' },
+      { path: '/out.ac3', format: 'ac3' },
+      { quality: 'best' },
+      AUDIO_PROBE,
+    );
+    expect(result.args).toEqual(expect.arrayContaining(['-b:a', '640k']));
   });
 
   it('does not force a sample rate when the source is already <= 48kHz', () => {

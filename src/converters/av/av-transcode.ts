@@ -92,7 +92,13 @@ const MP3_VBR: Record<Quality, string> = { smaller: '5', balanced: '2', best: '0
 const AAC_BITRATE: Record<Quality, string> = {
   smaller: '96k',
   balanced: '160k',
-  best: '256k',
+  best: '320k',
+};
+// ac3 tops out at 640k; it used to borrow AAC_BITRATE and cap itself at 256k.
+const AC3_BITRATE: Record<Quality, string> = {
+  smaller: '192k',
+  balanced: '384k',
+  best: '640k',
 };
 const OPUS_BITRATE: Record<Quality, string> = {
   smaller: '64k',
@@ -102,6 +108,42 @@ const OPUS_BITRATE: Record<Quality, string> = {
 const VORBIS_QSCALE: Record<Quality, string> = { smaller: '3', balanced: '6', best: '9' };
 const THEORA_QSCALE: Record<Quality, string> = { smaller: '4', balanced: '6', best: '8' };
 const MAX_SAMPLE_RATE = 48_000;
+
+// Targets that store audio bit-exactly. Nothing here may be resampled or
+// bit-depth-reduced: doing so throws away signal the container can hold.
+const LOSSLESS_AUDIO_OUT = new Set<FormatId>(['wav', 'flac', 'aiff', 'au', 'caf', 'mka']);
+
+/**
+ * Source bit depth, from the decoded sample format. `bits_per_raw_sample`
+ * carries the real depth for 24-in-32 packing, which `sample_fmt` flattens
+ * to `s32`.
+ */
+function sourceDepth(probe: ProbeResult): { fmt: string; bits: number } {
+  const audio = probe.streams.find((s) => s.codec_type === 'audio');
+  const fmt = (audio?.sample_fmt ?? '').replace(/p$/, '');
+  const raw = Number(audio?.bits_per_raw_sample ?? 0);
+  if (fmt === 'u8') return { fmt, bits: 8 };
+  if (fmt === 's16') return { fmt, bits: 16 };
+  if (fmt === 's32') return { fmt, bits: raw === 24 ? 24 : 32 };
+  // Lossy codecs all decode to float, but that float carries no more real
+  // resolution than 24 bits — widening to 32 doubles the file for nothing.
+  if (fmt === 'flt' || fmt === 'dbl') {
+    return { fmt, bits: probe.audioCodec?.startsWith('pcm_f') ? 32 : 24 };
+  }
+  // No sample_fmt: fall back to the codec name (`pcm_s24be` and friends state
+  // their depth), then to 24 — 16 would truncate a deeper decode.
+  const bits = Number(/^pcm_[suf](8|16|24|32|64)/.exec(probe.audioCodec ?? '')?.[1] ?? 0);
+  return { fmt, bits: bits > 0 ? Math.min(bits, 32) : 24 };
+}
+
+/** PCM codec that holds the source without truncating it. */
+function pcmCodec(probe: ProbeResult, endian: 'le' | 'be', allowFloat: boolean): string {
+  const { fmt, bits } = sourceDepth(probe);
+  if (allowFloat && (fmt === 'flt' || fmt === 'dbl')) return `pcm_f32${endian}`;
+  if (bits <= 16) return `pcm_s16${endian}`;
+  if (bits <= 24) return `pcm_s24${endian}`;
+  return `pcm_s32${endian}`;
+}
 
 const RESOLUTION_HEIGHT: Record<string, number | undefined> = {
   original: undefined,
@@ -133,7 +175,7 @@ function isRemuxCandidate(from: FormatId, to: FormatId, probe: ProbeResult): boo
   return probe.audioCodec === 'aac';
 }
 
-function audioEncodeArgs(to: FormatId, quality: Quality): string[] {
+function audioEncodeArgs(to: FormatId, quality: Quality, probe: ProbeResult): string[] {
   switch (to) {
     case 'mp3':
       return ['-c:a', 'libmp3lame', '-q:a', MP3_VBR[quality]];
@@ -144,19 +186,26 @@ function audioEncodeArgs(to: FormatId, quality: Quality): string[] {
       return ['-c:a', 'libopus', '-b:a', OPUS_BITRATE[quality]];
     case 'ogg':
       return ['-c:a', 'libvorbis', '-q:a', VORBIS_QSCALE[quality]];
+    // FLAC is integer-only (s16/s32). Naming the width stops ffmpeg from
+    // negotiating down to s16 when the decoder hands it a deeper frame.
     case 'flac':
-      return ['-c:a', 'flac'];
+    case 'mka':
+      return [
+        '-c:a',
+        'flac',
+        '-sample_fmt',
+        sourceDepth(probe).bits <= 16 ? 's16' : 's32',
+      ];
+    // wav and caf can both carry float; aiff/au stay integer.
     case 'wav':
-      return ['-c:a', 'pcm_s16le'];
+      return ['-c:a', pcmCodec(probe, 'le', true)];
+    case 'caf':
+      return ['-c:a', pcmCodec(probe, 'le', true)];
     case 'aiff':
     case 'au':
-      return ['-c:a', 'pcm_s16be'];
-    case 'caf':
-      return ['-c:a', 'pcm_s16le'];
+      return ['-c:a', pcmCodec(probe, 'be', false)];
     case 'ac3':
-      return ['-c:a', 'ac3', '-b:a', AAC_BITRATE[quality]];
-    case 'mka':
-      return ['-c:a', 'flac'];
+      return ['-c:a', 'ac3', '-b:a', AC3_BITRATE[quality]];
     default:
       return ['-c:a', 'aac', '-b:a', AAC_BITRATE[quality]];
   }
@@ -207,12 +256,19 @@ function resolutionFilter(resolution: string, hasVideo: boolean): string[] {
   return ['-vf', `scale=-2:min(ih\\,${height})`];
 }
 
-function audioRateArgs(probe: ProbeResult, channels: string): string[] {
+/**
+ * `to` decides whether the 48 kHz clamp applies at all: a lossless target must
+ * keep the source rate, or a 96/192 kHz master silently loses half its
+ * bandwidth on the way into a FLAC/WAV that could have held it.
+ */
+function audioRateArgs(probe: ProbeResult, channels: string, to: FormatId): string[] {
   const args: string[] = [];
   const sampleRate = Number(
     probe.streams.find((s) => s.codec_type === 'audio')?.sample_rate ?? 0,
   );
-  if (sampleRate > MAX_SAMPLE_RATE) args.push('-ar', String(MAX_SAMPLE_RATE));
+  if (!LOSSLESS_AUDIO_OUT.has(to) && sampleRate > MAX_SAMPLE_RATE) {
+    args.push('-ar', String(MAX_SAMPLE_RATE));
+  }
   if (channels === 'mono') args.push('-ac', '1');
   return args;
 }
@@ -322,14 +378,14 @@ export function buildFfmpegArgs(
       args.push('-an');
     } else if (probe.hasAudio) {
       args.push(...videoAudioTrackArgs(output.format, quality));
-      args.push(...audioRateArgs(probe, channels));
+      args.push(...audioRateArgs(probe, channels, output.format));
     } else {
       args.push('-an');
     }
     if (MOVFLAGS_TARGETS.has(output.format)) args.push('-movflags', '+faststart');
   } else {
-    args.push(...audioEncodeArgs(output.format, quality));
-    args.push(...audioRateArgs(probe, channels));
+    args.push(...audioEncodeArgs(output.format, quality, probe));
+    args.push(...audioRateArgs(probe, channels, output.format));
   }
 
   pushOutput(args, output);

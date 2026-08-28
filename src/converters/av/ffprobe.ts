@@ -10,6 +10,8 @@ export interface ProbeStream {
   readonly width?: number;
   readonly height?: number;
   readonly sample_rate?: string;
+  readonly sample_fmt?: string;
+  readonly bits_per_raw_sample?: string;
   readonly channels?: number;
   readonly duration?: string;
   readonly tags?: Record<string, string>;
