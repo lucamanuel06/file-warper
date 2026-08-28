@@ -22,6 +22,11 @@
 .select:hover:not(:disabled) {
   background: var(--bg-hover);
 }
+.select option,
+.select optgroup {
+  color: var(--text-primary);
+  background-color: var(--bg-elevated);
+}
 
 .chevron {
   position: absolute;

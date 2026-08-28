@@ -37,7 +37,7 @@ a {
 
 /* Tokens ----------------------------------------------------------------- */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
   /* Type */
   --font-ui:
@@ -110,6 +110,7 @@ a {
    (unless the user forced light) and once for an explicit in-app toggle. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg: rgb(30 30 32 / 0.62);
     --bg-opaque: #1e1e20;
     --bg-elevated: #2a2a2d;
@@ -131,6 +132,7 @@ a {
   }
 }
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --bg: rgb(30 30 32 / 0.62);
   --bg-opaque: #1e1e20;
   --bg-elevated: #2a2a2d;
@@ -149,6 +151,9 @@ a {
   --danger-subtle: rgb(255 69 58 / 0.16);
   --warn-subtle: rgb(255 159 10 / 0.18);
   --shadow-popover: 0 0 0 0.5px rgb(255 255 255 / 0.1), 0 8px 24px rgb(0 0 0 / 0.44);
+}
+:root[data-theme="light"] {
+  color-scheme: light;
 }
 
 html,

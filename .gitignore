@@ -13,3 +13,16 @@ playwright-report/
 # Sidecar binaries copied in by `npm run vendor` (scripts/vendor-binaries.mjs)
 # from already-installed node_modules packages — regenerated, not source.
 resources/
+
+# Aangevuld door IdeaForge bij het publiceren
+.venv/
+venv/
+__pycache__/
+# build/ bewust NIET genegeerd: bevat committed macOS/Windows-iconen en de
+# dmg-achtergrond (zie scripts/make-icon.mjs), geen build-output.
+.env
+.env.local
+.pnpm-store/
+.turbo/
+.cache/
+.git.ideaforge-opzij/
