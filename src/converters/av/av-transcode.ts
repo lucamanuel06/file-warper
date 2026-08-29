@@ -107,11 +107,12 @@ const OPUS_BITRATE: Record<Quality, string> = {
 };
 const VORBIS_QSCALE: Record<Quality, string> = { smaller: '3', balanced: '6', best: '9' };
 const THEORA_QSCALE: Record<Quality, string> = { smaller: '4', balanced: '6', best: '8' };
-const MAX_SAMPLE_RATE = 48_000;
-
-// Targets that store audio bit-exactly. Nothing here may be resampled or
-// bit-depth-reduced: doing so throws away signal the container can hold.
-const LOSSLESS_AUDIO_OUT = new Set<FormatId>(['wav', 'flac', 'aiff', 'au', 'caf', 'mka']);
+/**
+ * Audio containers that can carry album art as an attached picture. Everywhere
+ * else the cover has to be dropped: the ogg muxer answers a stray still by
+ * encoding it as a Theora video track, which is not what anyone asked for.
+ */
+const COVER_ART_OUT = new Set<FormatId>(['mp3', 'flac', 'm4a', 'mka']);
 
 /**
  * Source bit depth, from the decoded sample format. `bits_per_raw_sample`
@@ -257,20 +258,51 @@ function resolutionFilter(resolution: string, hasVideo: boolean): string[] {
 }
 
 /**
- * `to` decides whether the 48 kHz clamp applies at all: a lossless target must
- * keep the source rate, or a 96/192 kHz master silently loses half its
- * bandwidth on the way into a FLAC/WAV that could have held it.
+ * Deliberately does NOT set `-ar`.
+ *
+ * There used to be a blanket clamp to 48 kHz here. It cost a 96 kHz master
+ * half its bandwidth on the way into AAC and Vorbis, both of which encode
+ * 96 kHz natively (`ffmpeg -h encoder=aac` lists it; libvorbis has no rate
+ * limit at all). Left alone, ffmpeg resamples only when the chosen encoder
+ * genuinely cannot take the source rate, and then picks the nearest rate that
+ * encoder does support — 48 kHz for mp3/opus/ac3, unchanged for everything
+ * else. That is both correct today and correct for any format added later,
+ * which a hand-maintained table is not.
+ *
+ * Same principle Audacity works on: it exports at the project rate and never
+ * silently downsamples.
  */
-function audioRateArgs(probe: ProbeResult, channels: string, to: FormatId): string[] {
-  const args: string[] = [];
-  const sampleRate = Number(
-    probe.streams.find((s) => s.codec_type === 'audio')?.sample_rate ?? 0,
-  );
-  if (!LOSSLESS_AUDIO_OUT.has(to) && sampleRate > MAX_SAMPLE_RATE) {
-    args.push('-ar', String(MAX_SAMPLE_RATE));
+function audioRateArgs(_probe: ProbeResult, channels: string): string[] {
+  return channels === 'mono' ? ['-ac', '1'] : [];
+}
+
+/**
+ * Stream selection for an audio target.
+ *
+ * Without this ffmpeg keeps whatever video it finds, which produced three
+ * separate wrong answers: a real video survived into `.m4a`/`.mka`/`.ogg`
+ * (a video file wearing an audio extension), album art was re-encoded as
+ * Theora or H.264 or PNG instead of being copied, and mp3-with-cover to m4a
+ * failed outright — the ipod muxer rejects the h264 ffmpeg had picked for it.
+ */
+function audioStreamArgs(to: FormatId, probe: ProbeResult): string[] {
+  if (probe.hasAttachedPic && COVER_ART_OUT.has(to)) {
+    // Copy, never re-encode: the cover is already a JPEG or PNG, and
+    // `attached_pic` is what marks it as art rather than a one-frame movie.
+    return [
+      '-map',
+      '0:a:0',
+      '-map',
+      '0:v:0?',
+      '-c:v',
+      'copy',
+      '-disposition:v',
+      'attached_pic',
+    ];
   }
-  if (channels === 'mono') args.push('-ac', '1');
-  return args;
+  // `-vn` rather than an explicit `-map 0:a:0` so ffmpeg keeps choosing the
+  // best audio stream itself, which matters for files with several.
+  return ['-vn'];
 }
 
 export interface BuildArgsResult {
@@ -345,7 +377,20 @@ export function buildFfmpegArgs(
   const channels = typeof options.channels === 'string' ? options.channels : 'keep';
 
   if (isRemuxCandidate(input.format, output.format, probe)) {
-    const args = ['-i', input.path, '-map', '0:v:0?', '-map', '0:a:0?', '-c', 'copy'];
+    // Same trap as the transcode path: `.m4a` with album art remuxed to `.aac`
+    // failed because the adts muxer was handed the cover ("Only AAC streams
+    // can be muxed by the ADTS muxer"). Map the picture only where it fits.
+    const carriesVideo =
+      VIDEO_OUT_SET.has(output.format) || COVER_ART_OUT.has(output.format);
+    const args = [
+      '-i',
+      input.path,
+      ...(carriesVideo ? ['-map', '0:v:0?'] : []),
+      '-map',
+      '0:a:0?',
+      '-c',
+      'copy',
+    ];
     if (MOVFLAGS_TARGETS.has(output.format)) args.push('-movflags', '+faststart');
     pushOutput(args, output);
     return { args, isRemux: true };
@@ -378,14 +423,15 @@ export function buildFfmpegArgs(
       args.push('-an');
     } else if (probe.hasAudio) {
       args.push(...videoAudioTrackArgs(output.format, quality));
-      args.push(...audioRateArgs(probe, channels, output.format));
+      args.push(...audioRateArgs(probe, channels));
     } else {
       args.push('-an');
     }
     if (MOVFLAGS_TARGETS.has(output.format)) args.push('-movflags', '+faststart');
   } else {
+    args.push(...audioStreamArgs(output.format, probe));
     args.push(...audioEncodeArgs(output.format, quality, probe));
-    args.push(...audioRateArgs(probe, channels, output.format));
+    args.push(...audioRateArgs(probe, channels));
   }
 
   pushOutput(args, output);

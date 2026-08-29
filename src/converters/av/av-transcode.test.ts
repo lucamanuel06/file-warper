@@ -17,6 +17,7 @@ function fakeProbe(overrides: Partial<ProbeResult> = {}): ProbeResult {
     durationSec: 1,
     hasVideo: false,
     hasAudio: false,
+    hasAttachedPic: false,
     ...overrides,
   };
 }
@@ -41,6 +42,22 @@ const VIDEO_PROBE = fakeProbe({
     { index: 1, codec_type: 'audio', codec_name: 'aac', sample_rate: '44100' },
   ],
 });
+
+/** Every non-readOnly audio FormatId the converter can write. */
+const AUDIO_TARGETS = [
+  'mp3',
+  'wav',
+  'flac',
+  'aac',
+  'm4a',
+  'ogg',
+  'opus',
+  'aiff',
+  'ac3',
+  'caf',
+  'au',
+  'mka',
+] as const;
 
 const HIGH_RATE_AUDIO_PROBE = fakeProbe({
   hasAudio: true,
@@ -252,6 +269,110 @@ describe('buildFfmpegArgs (pure, snapshot)', () => {
     );
   });
 
+  it('drops video from every audio target', () => {
+    // A real video converted to an audio format used to keep its video track:
+    // `.m4a` and `.mka` came out as h264+audio, and `.ogg` re-encoded the
+    // picture to Theora. A video file wearing an audio extension.
+    for (const format of AUDIO_TARGETS) {
+      const result = buildFfmpegArgs(
+        { path: '/in.mp4', format: 'mp4' },
+        { path: `/out.${format}`, format },
+        {},
+        VIDEO_PROBE,
+      );
+      expect(result.args).toContain('-vn');
+    }
+  });
+
+  describe('album art', () => {
+    const COVER_PROBE = fakeProbe({
+      hasAudio: true,
+      hasAttachedPic: true,
+      audioCodec: 'mp3',
+      streams: [
+        { index: 0, codec_type: 'audio', codec_name: 'mp3', sample_rate: '44100' },
+        {
+          index: 1,
+          codec_type: 'video',
+          codec_name: 'mjpeg',
+          disposition: { attached_pic: 1 },
+        },
+      ],
+    });
+
+    const argsFor = (format: (typeof AUDIO_TARGETS)[number]) =>
+      buildFfmpegArgs(
+        { path: '/in.mp3', format: 'mp3' },
+        { path: `/out.${format}`, format },
+        {},
+        COVER_PROBE,
+      ).args;
+
+    it.each(['mp3', 'flac', 'm4a', 'mka'] as const)(
+      'copies the cover into %s without re-encoding it',
+      (format) => {
+        const args = argsFor(format);
+        // `-c:v copy` is the point: ffmpeg otherwise re-encoded the JPEG to
+        // PNG for mp3/flac, to Theora for ogg, and to h264 for mka.
+        expect(args).toEqual(
+          expect.arrayContaining(['-c:v', 'copy', '-disposition:v', 'attached_pic']),
+        );
+        expect(args).not.toContain('-vn');
+      },
+    );
+
+    it('drops the cover for containers that cannot hold one', () => {
+      for (const format of AUDIO_TARGETS) {
+        if (['mp3', 'flac', 'm4a', 'mka'].includes(format)) continue;
+        expect(argsFor(format)).toContain('-vn');
+      }
+    });
+
+    it('does not remux a cover into a container that rejects it', () => {
+      // m4a-with-art -> aac is a pure remux, and it failed: "Only AAC streams
+      // can be muxed by the ADTS muxer".
+      const remuxProbe = fakeProbe({
+        hasAudio: true,
+        hasAttachedPic: true,
+        audioCodec: 'aac',
+        streams: [
+          { index: 0, codec_type: 'audio', codec_name: 'aac', sample_rate: '44100' },
+          {
+            index: 1,
+            codec_type: 'video',
+            codec_name: 'mjpeg',
+            disposition: { attached_pic: 1 },
+          },
+        ],
+      });
+      const toAac = buildFfmpegArgs(
+        { path: '/in.m4a', format: 'm4a' },
+        { path: '/out.aac', format: 'aac' },
+        {},
+        remuxProbe,
+      );
+      expect(toAac.isRemux).toBe(true);
+      expect(toAac.args).not.toContain('0:v:0?');
+
+      // ...but m4a -> m4a keeps it, because that container can hold one.
+      const toM4a = buildFfmpegArgs(
+        { path: '/in.m4a', format: 'm4a' },
+        { path: '/out.m4a', format: 'm4a' },
+        {},
+        remuxProbe,
+      );
+      expect(toM4a.args).toContain('0:v:0?');
+    });
+
+    it('never lets a cover reach the ipod muxer as a video codec', () => {
+      // mp3-with-cover -> m4a failed outright: ffmpeg picked h264 for the
+      // still, and the ipod muxer refuses h264.
+      const args = argsFor('m4a');
+      expect(args).not.toContain('libx264');
+      expect(args.join(' ')).toContain('-c:v copy');
+    });
+  });
+
   it('channels=mono adds -ac 1', () => {
     const result = buildFfmpegArgs(
       { path: '/in.wav', format: 'wav' },
@@ -262,8 +383,12 @@ describe('buildFfmpegArgs (pure, snapshot)', () => {
     expect(result.args).toEqual(expect.arrayContaining(['-ac', '1']));
   });
 
-  it('never clamps the sample rate for a lossless target', () => {
-    for (const format of ['flac', 'wav', 'aiff', 'au', 'caf', 'mka'] as const) {
+  it('never forces a sample rate on any audio target', () => {
+    // ffmpeg resamples only when the chosen encoder cannot take the source
+    // rate, and then picks the nearest rate it does support. Naming one here
+    // used to cost AAC and Vorbis half of a 96 kHz master's bandwidth, since
+    // both encode 96 kHz natively.
+    for (const format of AUDIO_TARGETS) {
       const result = buildFfmpegArgs(
         { path: '/in.wav', format: 'wav' },
         { path: `/out.${format}`, format },
@@ -272,16 +397,6 @@ describe('buildFfmpegArgs (pure, snapshot)', () => {
       );
       expect(result.args).not.toContain('-ar');
     }
-  });
-
-  it('clamps sample rate to 48kHz for a lossy target above it', () => {
-    const result = buildFfmpegArgs(
-      { path: '/in.wav', format: 'wav' },
-      { path: '/out.mp3', format: 'mp3' },
-      {},
-      HIGH_RATE_AUDIO_PROBE,
-    );
-    expect(result.args).toEqual(expect.arrayContaining(['-ar', '48000']));
   });
 
   it('keeps 24-bit depth into wav/aiff instead of truncating to 16', () => {

@@ -14,6 +14,7 @@ export interface ProbeStream {
   readonly bits_per_raw_sample?: string;
   readonly channels?: number;
   readonly duration?: string;
+  readonly disposition?: Record<string, number>;
   readonly tags?: Record<string, string>;
 }
 
@@ -33,6 +34,12 @@ export interface ProbeResult {
   readonly height?: number;
   readonly videoCodec?: string;
   readonly audioCodec?: string;
+  /**
+   * The input carries album art (a single still flagged `attached_pic`) rather
+   * than a real video track. ffmpeg treats the two identically unless told
+   * otherwise, which is how a cover ends up re-encoded as Theora.
+   */
+  readonly hasAttachedPic: boolean;
 }
 
 interface CacheEntry {
@@ -73,7 +80,14 @@ export async function probeMedia(filePath: string): Promise<ProbeResult> {
 
   const parsed = JSON.parse(stdout) as { format?: ProbeFormat; streams?: ProbeStream[] };
   const streams = parsed.streams ?? [];
-  const videoStream = streams.find((s) => s.codec_type === 'video');
+  const attachedPic = streams.find(
+    (s) => s.codec_type === 'video' && s.disposition?.attached_pic === 1,
+  );
+  // A cover is not a video track: picking it as `videoStream` would make a
+  // music file look like something worth scaling and re-encoding.
+  const videoStream = streams.find(
+    (s) => s.codec_type === 'video' && s.disposition?.attached_pic !== 1,
+  );
   const audioStream = streams.find((s) => s.codec_type === 'audio');
   const durationSec =
     Number(
@@ -85,6 +99,7 @@ export async function probeMedia(filePath: string): Promise<ProbeResult> {
     streams,
     durationSec,
     hasVideo: !!videoStream,
+    hasAttachedPic: !!attachedPic,
     hasAudio: !!audioStream,
     width: videoStream?.width,
     height: videoStream?.height,
